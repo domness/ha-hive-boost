@@ -46,7 +46,11 @@ class HiveBoostCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    try {
+      this._render();
+    } catch (e) {
+      console.error("[HiveBoostCard] render error:", e);
+    }
   }
 
   getCardSize() {
@@ -395,4 +399,6 @@ const CSS = `
   .btn-start:not(:disabled):active { transform: scale(0.98); }
 `;
 
-customElements.define("hive-boost-card", HiveBoostCard);
+if (!customElements.get("hive-boost-card")) {
+  customElements.define("hive-boost-card", HiveBoostCard);
+}
