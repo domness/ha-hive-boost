@@ -42,18 +42,24 @@ type: custom:hive-boost-card
 entity: climate.lounge
 ```
 
-Each card shows the room's current temperature and boost status. Tap **Boost** to expand the card and choose a temperature and duration. You can add as many cards as you like, on as many dashboards as you like — mix and match rooms per view.
+Each card shows the room's current temperature, heating state, and boost status. Tap **Boost** to expand the card and choose a temperature and duration. You can add as many cards as you like, on as many dashboards as you like — mix and match rooms per view.
 
 **All options:**
 
 ```yaml
 type: custom:hive-boost-card
-entity: climate.main_bedroom
-name: Main Bedroom        # optional display name override
-icon: mdi:bed             # optional MDI icon (default: thermometer)
+entity: climate.main_bedroom   # required — climate.* or sensor.*_boost
+name: Main Bedroom             # optional — display name override (auto-detected if omitted)
+icon: mdi:bed                  # optional — any MDI icon; omit for default thermometer
+show_graph: true               # optional — show 24 h temperature history graph in background
 ```
 
-> **Note:** After first install, do a hard browser refresh (Cmd+Shift+R / Ctrl+Shift+R) so the card script is picked up.
+| Option | Required | Description |
+|---|---|---|
+| `entity` | Yes | A Hive climate entity (`climate.*`) or its corresponding boost sensor (`sensor.*_boost`) |
+| `name` | No | Override the display name shown on the card. Defaults to the entity's friendly name |
+| `icon` | No | Any [MDI icon](https://pictogrammers.com/library/mdi/) e.g. `mdi:bed`. Omit for the default thermometer |
+| `show_graph` | No | Set to `true` to show the last 24 hours of temperature history as a background sparkline |
 
 ## Services
 
@@ -65,7 +71,7 @@ Start a boost on a specific Hive TRV.
 |---|---|---|---|
 | `entity_id` | entity | — | Hive climate entity (e.g. `climate.lounge`) |
 | `temperature` | float | 22.0 | Target temperature in °C (5–32) |
-| `duration_minutes` | int | 60 | Duration in minutes (15–360) |
+| `duration_minutes` | int | 60 | Duration in minutes (15–180) |
 
 ### `hive_boost.cancel_boost`
 

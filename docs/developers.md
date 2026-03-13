@@ -11,7 +11,7 @@ Central state machine. Discovers Hive climate entities via the entity registry, 
 One `HiveBoostSensor` per Hive TRV. Reads from the coordinator and exposes boost state, temperature, and time remaining as entity attributes. Registered via `async_forward_entry_setups`.
 
 **Frontend (`panel.py` + `www/`)**
-Serves the `www/` directory as static files under `/hive_boost_files/` and registers `hive-boost-card.js` as a Lovelace module resource via `add_extra_js_url`. The card (`HiveBoostCard`) is a shadow DOM custom element that calls `hive_boost.start_boost` / `hive_boost.cancel_boost` via the HA WebSocket API.
+Serves the `www/` directory as static files under `/hive_boost_files/` and registers `hive-boost-card.js` as a persistent Lovelace module resource via the Lovelace resource storage collection (equivalent to Settings → Dashboards → Resources). The card (`HiveBoostCard`) is a shadow DOM custom element that calls `hive_boost.start_boost` / `hive_boost.cancel_boost` via the HA WebSocket API.
 
 ## File map
 
@@ -42,10 +42,13 @@ custom_components/hive_boost/
 
 `panel.py` is called once on first load (guarded by `hass.data[f"{DOMAIN}_panel"]`) to avoid double-registration on config entry reloads. It:
 
-1. Registers `www/` as a static path via `hass.http.async_register_static_paths`
-2. Calls `add_extra_js_url` to inject the card script into the HA frontend HTML
+1. Registers `www/` as a static path via `hass.http.async_register_static_paths` (immediate)
+2. Defers resource registration until `EVENT_HOMEASSISTANT_STARTED` if HA is still booting, otherwise registers immediately
+3. Writes the card URL to Lovelace's resource storage collection via `collection.async_create_item` — the same store used by Settings → Dashboards → Resources
 
-`add_extra_js_url` takes effect on the next full page load — hence the hard-refresh requirement after first install.
+This approach is reliable across browser navigation, service worker caching, and the iOS app because Lovelace loads its resources itself with proper `customElements.whenDefined` handling, rather than relying on a `<script>` tag in the cached HTML. Falls back to `add_extra_js_url` if HA is running in YAML Lovelace mode (where the resource storage collection is unavailable).
+
+The resource is removed from Lovelace storage when the integration is fully uninstalled via `async_remove_entry` → `async_remove_panel`.
 
 ## Testing a boost manually
 
@@ -63,14 +66,19 @@ Or call `hive_boost.cancel_boost` with just `entity_id` to stop it.
 
 ```
 start_boost called
-  → set climate temperature via homeassistant.set_temperature
+  → call hive.boost_heating_on with time_period (HH:MM:SS) + temperature
   → store boost state in memory + persist to .storage
   → schedule revert timer at ends_at
 
-Timer fires / cancel_boost called
-  → set climate hvac_mode to "auto"
+Timer fires (natural expiry)
+  → call hive.boost_heating_off
   → remove boost state from memory + persist
-  → fire hive_boost_boost_ended / hive_boost_boost_cancelled event
+  → fire hive_boost_boost_ended event
+
+cancel_boost called (manual)
+  → call hive.boost_heating_off
+  → remove boost state from memory + persist
+  → fire hive_boost_boost_cancelled event
 ```
 
 State is restored on HA restart: unexpired boosts are re-loaded from storage and their revert timers are rescheduled.

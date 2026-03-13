@@ -179,10 +179,15 @@ class HiveBoostCard extends HTMLElement {
   get _statusText() {
     if (this._boostActive) {
       const m = this._sensor?.attributes.minutes_remaining;
-      return { label: m > 0 ? `${m}m left` : "Boosting", active: true };
+      return { label: m > 0 ? `${m}m left` : "Boosting", active: true, heating: false };
+    }
+    const action = this._climate?.attributes.hvac_action;
+    const target = this._climate?.attributes.temperature;
+    if (action === "heating" && target != null) {
+      return { label: `Heating to ${target}°`, active: false, heating: true };
     }
     const mode = this._climate?.state;
-    return { label: mode === "off" || !mode ? "Off" : mode, active: false };
+    return { label: mode === "off" || !mode ? "Off" : mode, active: false, heating: false };
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -190,7 +195,7 @@ class HiveBoostCard extends HTMLElement {
   _render() {
     if (!this._hass || !this._config) return;
 
-    const { label: statusLabel, active: statusActive } = this._statusText;
+    const { label: statusLabel, active: statusActive, heating: statusHeating } = this._statusText;
     const totalMins = this._modalHours * 60 + this._modalMins;
     const tooShort = totalMins < 15;
 
@@ -208,7 +213,10 @@ class HiveBoostCard extends HTMLElement {
                  </svg>`
             }
             <span class="name">${this._name}</span>
-            <span class="status ${statusActive ? "status--on" : ""}">${statusLabel}</span>
+            <div class="status-wrap">
+              ${statusHeating ? `<ha-icon class="status-flame" icon="mdi:fire"></ha-icon>` : ""}
+              <span class="status ${statusActive || statusHeating ? "status--on" : ""}">${statusLabel}</span>
+            </div>
           </div>
 
           <div class="row-main">
@@ -363,6 +371,8 @@ const CSS = `
   }
   .icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--secondary-text-color, #aaa); --mdi-icon-size: 18px; }
   .name { flex: 1; font-size: 15px; font-weight: 600; }
+  .status-wrap { display: flex; align-items: center; gap: 3px; }
+  .status-flame { --mdi-icon-size: 14px; color: #FF6600; }
   .status { font-size: 13px; color: var(--secondary-text-color, #aaa); }
   .status--on { color: #FF6600; font-weight: 600; }
 
