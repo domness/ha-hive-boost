@@ -5,11 +5,15 @@
  *   type: custom:hive-boost-card
  *   entity: climate.lounge    # climate.* or sensor.*_boost
  *   name: Lounge              # optional display name override
+ *   icon: mdi:thermometer     # optional icon (omit for default flame SVG)
+ *   show_graph: true          # optional background temperature history graph
  */
 
 const BOOST_DOMAIN = "hive_boost";
 const HOUR_OPTIONS = [0, 1, 2, 3];
 const MINUTE_OPTIONS = [0, 15, 30, 45];
+const HISTORY_REFRESH_MS = 5 * 60 * 1000; // re-fetch graph data every 5 min
+const HISTORY_HOURS = 24;
 
 class HiveBoostCard extends HTMLElement {
   static getStubConfig() {
@@ -26,6 +30,8 @@ class HiveBoostCard extends HTMLElement {
     this._modalTemp = 22;
     this._modalHours = 1;
     this._modalMins = 0;
+    this._graphData = null;
+    this._lastHistoryFetch = 0;
     this.attachShadow({ mode: "open" });
   }
 
@@ -42,10 +48,20 @@ class HiveBoostCard extends HTMLElement {
     } else {
       throw new Error("hive-boost-card: entity must be climate.* or sensor.*_boost");
     }
+    // Reset graph when config changes
+    this._graphData = null;
+    this._lastHistoryFetch = 0;
   }
 
   set hass(hass) {
     this._hass = hass;
+    if (this._config?.show_graph) {
+      const now = Date.now();
+      if (now - this._lastHistoryFetch > HISTORY_REFRESH_MS) {
+        this._lastHistoryFetch = now; // set early to prevent concurrent fetches
+        this._fetchHistory();         // async, intentionally not awaited
+      }
+    }
     try {
       this._render();
     } catch (e) {
@@ -57,10 +73,89 @@ class HiveBoostCard extends HTMLElement {
     return this._expanded ? 5 : 3;
   }
 
-  // ── Data helpers ─────────────────────────────────────────────────────────
+  // ── History / graph ───────────────────────────────────────────────────────
 
-  get _sensor() { return this._hass?.states[this._sensorId]; }
-  get _climate() { return this._hass?.states[this._climateId]; }
+  async _fetchHistory() {
+    try {
+      const start = new Date(Date.now() - HISTORY_HOURS * 60 * 60 * 1000).toISOString();
+      const result = await this._hass.callWs({
+        type: "history/history_during_period",
+        start_time: start,
+        entity_ids: [this._climateId],
+        minimal_response: true,
+        no_attributes: false,
+        significant_changes_only: false,
+      });
+
+      const entries = result[this._climateId] ?? [];
+      const temps = entries
+        .map(e => e.a?.current_temperature)
+        .filter(t => t != null && !isNaN(t));
+
+      if (temps.length >= 2) {
+        this._graphData = temps;
+        this._render();
+      }
+    } catch (e) {
+      console.debug("[HiveBoostCard] history fetch failed:", e);
+    }
+  }
+
+  _buildGraphSvg() {
+    const data = this._graphData;
+    if (!data || data.length < 2) return "";
+
+    const W = 500, H = 120, PAD = 12;
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+
+    const toX = i  => (i / (data.length - 1)) * W;
+    const toY = t  => H - PAD - ((t - min) / range) * (H - PAD * 2);
+
+    const pts = data.map((t, i) => [toX(i), toY(t)]);
+
+    // Smooth cubic bezier through all points
+    let linePath = `M ${pts[0][0]},${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1];
+      const [x1, y1] = pts[i];
+      const cx = (x0 + x1) / 2;
+      linePath += ` C ${cx},${y0} ${cx},${y1} ${x1},${y1}`;
+    }
+    const fillPath = `${linePath} L ${W},${H} L 0,${H} Z`;
+
+    // Unique gradient ID per entity so multiple cards don't clash
+    const gradId = `hbg-${this._climateId.replace(/\W/g, "_")}`;
+
+    return `
+      <svg class="graph-bg"
+           viewBox="0 0 ${W} ${H}"
+           preserveAspectRatio="none"
+           xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="var(--primary-color)" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${fillPath}"
+              fill="url(#${gradId})"/>
+        <path d="${linePath}"
+              fill="none"
+              stroke="var(--primary-color)"
+              stroke-width="2.5"
+              stroke-opacity="0.35"
+              stroke-linecap="round"
+              stroke-linejoin="round"/>
+      </svg>`;
+  }
+
+  // ── Data helpers ──────────────────────────────────────────────────────────
+
+  get _sensor()      { return this._hass?.states[this._sensorId]; }
+  get _climate()     { return this._hass?.states[this._climateId]; }
   get _boostActive() { return this._sensor?.attributes.boost_active === true; }
 
   get _currentTemp() {
@@ -102,6 +197,7 @@ class HiveBoostCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${CSS}</style>
       <ha-card>
+        ${this._config.show_graph ? this._buildGraphSvg() : ""}
         <div class="body">
 
           <div class="row-top">
@@ -234,12 +330,28 @@ class HiveBoostCard extends HTMLElement {
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const CSS = `
-  ha-card { overflow: hidden; }
+  ha-card {
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Background graph */
+  .graph-bg {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 55%;
+    pointer-events: none;
+    z-index: 0;
+  }
 
   .body {
     padding: 16px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--primary-text-color, #1A1A2E);
+    position: relative;
+    z-index: 1;
   }
 
   /* Top row */
