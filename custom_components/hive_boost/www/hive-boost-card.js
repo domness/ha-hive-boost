@@ -78,7 +78,7 @@ class HiveBoostCard extends HTMLElement {
   async _fetchHistory() {
     try {
       const start = new Date(Date.now() - HISTORY_HOURS * 60 * 60 * 1000).toISOString();
-      const result = await this._hass.callWs({
+      const result = await this._hass.connection.sendMessagePromise({
         type: "history/history_during_period",
         start_time: start,
         entity_ids: [this._climateId],
