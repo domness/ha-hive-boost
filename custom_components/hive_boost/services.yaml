@@ -1,0 +1,51 @@
+start_boost:
+  name: Start Boost
+  description: >
+    Boost a Hive TRV or thermostat to a target temperature for a set duration.
+    The climate entity will automatically revert to its schedule when the boost ends.
+  fields:
+    entity_id:
+      name: Climate Entity
+      description: The Hive climate entity to boost (e.g. climate.lounge)
+      required: true
+      selector:
+        entity:
+          domain: climate
+    temperature:
+      name: Boost Temperature
+      description: Target temperature during the boost (°C)
+      required: true
+      default: 22
+      selector:
+        number:
+          min: 5
+          max: 32
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: slider
+    duration:
+      name: Duration
+      description: How long to boost for
+      required: true
+      default: "1h"
+      selector:
+        select:
+          options:
+            - "30m"
+            - "1h"
+            - "2h"
+            - "3h"
+
+cancel_boost:
+  name: Cancel Boost
+  description: >
+    Cancel an active boost on a Hive TRV or thermostat.
+    The climate entity will immediately revert to its schedule.
+  fields:
+    entity_id:
+      name: Climate Entity
+      description: The Hive climate entity whose boost should be cancelled
+      required: true
+      selector:
+        entity:
+          domain: climate

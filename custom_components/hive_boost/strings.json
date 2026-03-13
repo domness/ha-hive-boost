@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hive Boost Setup",
+        "description": "Hive Boost will automatically discover all Hive TRV climate entities in your system.",
+        "data": {
+          "min_temp": "Minimum boost temperature (°C)",
+          "max_temp": "Maximum boost temperature (°C)",
+          "default_temp": "Default boost temperature (°C)",
+          "default_duration": "Default boost duration"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Hive Boost is already configured."
+    }
+  }
+}
