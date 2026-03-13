@@ -6,16 +6,11 @@ DOMAIN = "hive_boost"
 DEFAULT_MIN_TEMP = 16.0
 DEFAULT_MAX_TEMP = 30.0
 DEFAULT_BOOST_TEMP = 22.0
-DEFAULT_DURATION = "1h"
 
-# Duration options and their timedelta-compatible strings
-DURATION_OPTIONS = ["30m", "1h", "2h", "3h"]
-DURATION_TO_SECONDS = {
-    "30m": 1800,
-    "1h": 3600,
-    "2h": 7200,
-    "3h": 10800,
-}
+# Duration defaults (integer minutes)
+DEFAULT_DURATION_MINUTES = 60
+MIN_DURATION_MINUTES = 15
+MAX_DURATION_MINUTES = 180
 
 # Hive TRV model identifiers used to auto-discover entities
 HIVE_MODELS = ["TRV003", "SLT3", "SLT3B", "SLT3C", "NANO2"]

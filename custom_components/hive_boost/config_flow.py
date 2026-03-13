@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
 
 from .const import (
     DOMAIN,
     DEFAULT_MIN_TEMP,
     DEFAULT_MAX_TEMP,
     DEFAULT_BOOST_TEMP,
-    DEFAULT_DURATION,
-    DURATION_OPTIONS,
+    DEFAULT_DURATION_MINUTES,
+    MIN_DURATION_MINUTES,
+    MAX_DURATION_MINUTES,
 )
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
@@ -19,7 +19,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional("min_temp", default=DEFAULT_MIN_TEMP): vol.Coerce(float),
         vol.Optional("max_temp", default=DEFAULT_MAX_TEMP): vol.Coerce(float),
         vol.Optional("default_temp", default=DEFAULT_BOOST_TEMP): vol.Coerce(float),
-        vol.Optional("default_duration", default=DEFAULT_DURATION): vol.In(DURATION_OPTIONS),
+        vol.Optional("default_duration_minutes", default=DEFAULT_DURATION_MINUTES): vol.All(
+            vol.Coerce(int), vol.Range(min=MIN_DURATION_MINUTES, max=MAX_DURATION_MINUTES)
+        ),
     }
 )
 

@@ -3,9 +3,10 @@
   "name": "Hive Boost",
   "codeowners": ["@domness"],
   "version": "1.0.0",
+  "dependencies": ["panel_custom"],
+  "after_dependencies": ["hive"],
   "documentation": "https://github.com/domness/ha-hive-interface",
   "issue_tracker": "https://github.com/domness/ha-hive-interface/issues",
-  "dependencies": [],
   "requirements": [],
   "iot_class": "local_push",
   "config_flow": true
