@@ -2,7 +2,7 @@
 
 ## What this is
 A Home Assistant custom integration that adds per-room boost control for Hive TRVs.
-HACS-installable. Targets HA 2024.1.0+.
+HACS-installable. Targets HA 2026.3.1+.
 
 ## Dev workflow
 1. Edit files in `custom_components/hive_boost/`
@@ -26,13 +26,13 @@ Call this HA service to reload just this integration:
 
 ## Testing a boost manually
 Developer Tools → Services → hive_boost.start_boost
-  entity_id: climate.lounge
+  entity_id: climate.<your_room>
   temperature: 22
-  duration: 1h
+  duration_minutes: 60
 
 ## Entities created
-sensor.lounge_boost, sensor.front_room_boost, sensor.main_bedroom_boost,
-sensor.nursery_boost, sensor.second_bedroom_boost, sensor.thermostat_boost
+One `sensor.<room>_boost` entity per Hive TRV discovered in the entity registry.
+These are generated automatically — no hardcoded list.
 
 ## Commits should
 - Be descriptive and concise
