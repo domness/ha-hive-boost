@@ -153,10 +153,13 @@ class HiveBoostCoordinator:
 
         await self._cancel_boost_for(entity_id, revert=False)
 
+        hours, mins = divmod(duration_minutes, 60)
+        time_period = f"{hours:02d}:{mins:02d}:00"
+
         await self.hass.services.async_call(
-            CLIMATE_DOMAIN,
-            "set_temperature",
-            {"entity_id": entity_id, "temperature": temperature},
+            "hive",
+            "boost_heating_on",
+            {"entity_id": entity_id, "time_period": time_period, "temperature": str(temperature)},
             blocking=True,
         )
 
@@ -197,13 +200,13 @@ class HiveBoostCoordinator:
         self._timers[entity_id] = cancel
 
     async def _revert_climate(self, entity_id: str) -> None:
-        """Revert climate entity back to auto/schedule mode."""
-        _LOGGER.info("Boost ended for %s — reverting to auto", entity_id)
+        """Turn off Hive boost after the scheduled duration expires."""
+        _LOGGER.info("Boost ended for %s — turning off Hive boost", entity_id)
 
         await self.hass.services.async_call(
-            CLIMATE_DOMAIN,
-            "set_hvac_mode",
-            {"entity_id": entity_id, "hvac_mode": "auto"},
+            "hive",
+            "boost_heating_off",
+            {"entity_id": entity_id},
             blocking=True,
         )
 
@@ -223,9 +226,9 @@ class HiveBoostCoordinator:
 
         if revert and entity_id in self._boosts:
             await self.hass.services.async_call(
-                CLIMATE_DOMAIN,
-                "set_hvac_mode",
-                {"entity_id": entity_id, "hvac_mode": "auto"},
+                "hive",
+                "boost_heating_off",
+                {"entity_id": entity_id},
                 blocking=True,
             )
 
