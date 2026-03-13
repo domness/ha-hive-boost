@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,10 +17,8 @@ _PANEL_URL = "hive"
 async def async_setup_panel(hass: HomeAssistant) -> None:
     """Serve static files and register the sidebar panel."""
     # Serve the www/ directory under /hive_boost_files/
-    hass.http.register_static_path(
-        _STATIC_URL,
-        str(_WWW_DIR),
-        cache_headers=False,
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(_STATIC_URL, str(_WWW_DIR), False)]
     )
 
     from homeassistant.components.panel_custom import async_register_panel
