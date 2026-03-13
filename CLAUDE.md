@@ -33,3 +33,9 @@ Developer Tools → Services → hive_boost.start_boost
 ## Entities created
 sensor.lounge_boost, sensor.front_room_boost, sensor.main_bedroom_boost,
 sensor.nursery_boost, sensor.second_bedroom_boost, sensor.thermostat_boost
+
+## Commits should
+- Be descriptive and concise
+- Include a summary of changes
+- Reference any relevant issues or pull requests
+- Follow the conventional commit format
