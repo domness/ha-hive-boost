@@ -48,7 +48,8 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
 async def async_remove_panel(hass: HomeAssistant) -> None:
     """Remove the card from Lovelace resources on integration unload."""
     try:
-        collection = hass.data.get("lovelace", {}).get("resources")
+        lovelace = hass.data.get("lovelace")
+        collection = getattr(lovelace, "resources", None)
         if collection is None:
             return
         await collection.async_load()
@@ -68,7 +69,8 @@ async def _async_register_resource(hass: HomeAssistant, url: str) -> None:
     (resource storage collection is unavailable).
     """
     try:
-        collection = hass.data.get("lovelace", {}).get("resources")
+        lovelace = hass.data.get("lovelace")
+        collection = getattr(lovelace, "resources", None)
         if collection is None:
             raise RuntimeError("Lovelace resource collection not available (YAML mode?)")
 
