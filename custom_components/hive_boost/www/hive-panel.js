@@ -40,6 +40,11 @@ class HivePanel extends HTMLElement {
     }
   }
 
+  // Required for use as a Lovelace dashboard card
+  setConfig(_config) {}
+
+  getCardSize() { return 6; }
+
   // Called by HA when panel config changes (e.g. narrow mode)
   set narrow(v) {
     this._narrow = v;
