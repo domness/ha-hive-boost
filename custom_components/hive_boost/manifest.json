@@ -1,11 +1,11 @@
 {
   "domain": "hive_boost",
   "name": "Hive Boost",
+  "codeowners": ["@domness"],
   "version": "1.0.0",
-  "documentation": "https://github.com/yourusername/hive_boost",
-  "issue_tracker": "https://github.com/yourusername/hive_boost/issues",
+  "documentation": "https://github.com/domness/ha-hive-interface",
+  "issue_tracker": "https://github.com/domness/ha-hive-interface/issues",
   "dependencies": [],
-  "codeowners": [],
   "requirements": [],
   "iot_class": "local_push",
   "config_flow": true
