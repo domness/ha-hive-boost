@@ -101,7 +101,12 @@ class HiveBoostCard extends HTMLElement {
         <div class="body">
 
           <div class="row-top">
-            <span class="icon">🌡️</span>
+            ${this._config.icon
+              ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
+              : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                   <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                 </svg>`
+            }
             <span class="name">${this._name}</span>
             <span class="status ${statusActive ? "status--on" : ""}">${statusLabel}</span>
           </div>
@@ -240,7 +245,7 @@ const CSS = `
     gap: 8px;
     margin-bottom: 14px;
   }
-  .icon { font-size: 18px; flex-shrink: 0; }
+  .icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--secondary-text-color, #aaa); --mdi-icon-size: 18px; }
   .name { flex: 1; font-size: 15px; font-weight: 600; }
   .status { font-size: 13px; color: var(--secondary-text-color, #aaa); }
   .status--on { color: #FF6600; font-weight: 600; }

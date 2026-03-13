@@ -44,12 +44,13 @@ entity: climate.lounge
 
 Each card shows the room's current temperature and boost status. Tap **Boost** to expand the card and choose a temperature and duration. You can add as many cards as you like, on as many dashboards as you like — mix and match rooms per view.
 
-**Optional name override:**
+**All options:**
 
 ```yaml
 type: custom:hive-boost-card
 entity: climate.main_bedroom
-name: Main Bedroom
+name: Main Bedroom        # optional display name override
+icon: mdi:bed             # optional MDI icon (default: thermometer)
 ```
 
 > **Note:** After first install, do a hard browser refresh (Cmd+Shift+R / Ctrl+Shift+R) so the card script is picked up.
