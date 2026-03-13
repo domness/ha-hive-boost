@@ -66,9 +66,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register the Hive panel
-    from .panel import async_setup_panel
-    await async_setup_panel(hass)
+    # Register the Hive panel (only on first load)
+    if f"{DOMAIN}_panel" not in hass.data:
+        from .panel import async_setup_panel
+        await async_setup_panel(hass)
+        hass.data[f"{DOMAIN}_panel"] = True
 
     return True
 
