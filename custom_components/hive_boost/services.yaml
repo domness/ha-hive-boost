@@ -20,21 +20,21 @@ start_boost:
         number:
           min: 5
           max: 32
-          step: 0.5
+          step: 1
           unit_of_measurement: "°C"
           mode: slider
-    duration:
-      name: Duration
-      description: How long to boost for
+    duration_minutes:
+      name: Duration (minutes)
+      description: How long to boost for, in minutes (15–180)
       required: true
-      default: "1h"
+      default: 60
       selector:
-        select:
-          options:
-            - "30m"
-            - "1h"
-            - "2h"
-            - "3h"
+        number:
+          min: 15
+          max: 180
+          step: 15
+          unit_of_measurement: "min"
+          mode: slider
 
 cancel_boost:
   name: Cancel Boost
