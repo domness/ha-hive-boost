@@ -87,6 +87,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clean up when the integration is fully removed."""
+    from .panel import async_remove_panel
+    await async_remove_panel(hass)
+    hass.data.pop(f"{DOMAIN}_panel", None)
+
+
 class HiveBoostCoordinator:
     """Manages boost state for all discovered Hive climate entities."""
 
