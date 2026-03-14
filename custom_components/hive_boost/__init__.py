@@ -166,7 +166,7 @@ class HiveBoostCoordinator:
         await self.hass.services.async_call(
             "hive",
             "boost_heating_on",
-            {"entity_id": entity_id, "time_period": time_period, "temperature": str(temperature)},
+            {"entity_id": entity_id, "time_period": time_period, "temperature": temperature},
             blocking=True,
         )
 
@@ -231,7 +231,7 @@ class HiveBoostCoordinator:
         if entity_id in self._timers:
             self._timers.pop(entity_id)()
 
-        if revert and entity_id in self._boosts:
+        if revert:
             await self.hass.services.async_call(
                 "hive",
                 "boost_heating_off",
