@@ -38,6 +38,7 @@ class HiveBoostCard extends HTMLElement {
     this._modalMins = 0;
     this._graphData = null;
     this._lastHistoryFetch = 0;
+    this._initialized = false;
     this.attachShadow({ mode: "open" });
   }
 
@@ -75,9 +76,7 @@ class HiveBoostCard extends HTMLElement {
       if (dialog) dialog.open = false;
     }
 
-    // Skip re-rendering while the modal is open. Replacing innerHTML would
-    // destroy the ha-dialog element, which fires its 'closed' event and
-    // then immediately closes the freshly-recreated one.
+    // Skip re-rendering while the modal is open.
     if (this._modalOpen) return;
 
     try {
@@ -213,130 +212,91 @@ class HiveBoostCard extends HTMLElement {
   _render() {
     if (!this._hass || !this._config) return;
 
-    const { label: statusLabel, active: statusActive, heating: statusHeating } = this._statusText;
-    const totalMins = this._modalHours * 60 + this._modalMins;
-    const tooShort = totalMins < 15;
+    const root = this.shadowRoot;
 
-    this.shadowRoot.innerHTML = `
-      <style>${CSS}</style>
-      <ha-card>
-        <div class="card-top">
-          ${this._config.show_graph ? this._buildGraphSvg() : ""}
-          <div class="body">
+    // One-time setup: create the persistent DOM skeleton.
+    // ha-dialog lives here permanently — tearing it down on every hass update
+    // causes it to fire 'closed' asynchronously, which races with the next
+    // open call and produces the open→close flicker.
+    if (!this._initialized) {
+      this._initialized = true;
 
-            <div class="row-top">
-              ${this._config.icon
-                ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
-                : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                     <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-                   </svg>`
-              }
-              <span class="name">${this._name}</span>
-              <div class="status-wrap">
-                ${statusHeating ? `<ha-icon class="status-flame" icon="mdi:fire"></ha-icon>` : ""}
-                <span class="status ${statusActive || statusHeating ? "status--on" : ""}">${statusLabel}</span>
-              </div>
-            </div>
+      const style = document.createElement("style");
+      style.textContent = CSS;
+      root.appendChild(style);
 
-            <div class="row-main">
-              <div class="temp-block">
-                <span class="temp-val">${this._currentTemp}</span>
-                <span class="temp-lbl">Current</span>
-              </div>
-              <div class="actions">
-                ${this._boostActive ? `
-                  <div class="pill-active">Boosting</div>
-                  <button class="btn-stop" id="stop-btn">Stop boost</button>
-                ` : `
-                  <button class="btn-boost" id="toggle-btn">Boost</button>
-                `}
-              </div>
-            </div>
+      const card = document.createElement("ha-card");
+      card.id = "hbc-card";
+      root.appendChild(card);
 
-          </div>
-        </div>
-      </ha-card>
+      const dialog = document.createElement("ha-dialog");
+      dialog.id = "boost-modal";
+      dialog.setAttribute("hideActions", "");
+      root.appendChild(dialog);
 
-      <!--
-        ha-dialog renders via HA's Material dialog component.
-        It lives outside ha-card so it can overlay the full screen.
-        open is set imperatively after render to trigger HA's own
-        open animation and focus-trap logic.
-      -->
-      <ha-dialog
-        id="boost-modal"
-        heading="Boost ${this._name}"
-        hideActions
-      >
-        <div class="modal-content">
-          <div class="exp-row">
-            <span class="exp-label">Temperature</span>
-            <div class="temp-picker">
-              <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
-              <span class="temp-display">${this._modalTemp}°</span>
-              <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
-            </div>
-          </div>
-
-          <span class="exp-label">Duration</span>
-          <div class="dur-picker">
-            <div class="dur-col">
-              ${HOUR_OPTIONS.map(h => `
-                <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
-                      data-dtype="hours" data-dval="${h}">${h}h</span>
-              `).join("")}
-            </div>
-            <div class="dur-sep">:</div>
-            <div class="dur-col">
-              ${MINUTE_OPTIONS.map(m => `
-                <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
-                      data-dtype="mins" data-dval="${m}">${m}m</span>
-              `).join("")}
-            </div>
-          </div>
-
-          ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
-
-          <div class="modal-actions">
-            <mwc-button id="start-btn" raised ?disabled="${tooShort}">Start Boost</mwc-button>
-            <mwc-button id="cancel-btn" dialogAction="cancel">Cancel</mwc-button>
-          </div>
-        </div>
-      </ha-dialog>
-    `;
-
-    // Open the dialog imperatively so ha-dialog can run its own
-    // open animation and focus-trap setup (setting the attribute in
-    // HTML bypasses these lifecycle hooks).
-    if (this._modalOpen) {
-      const dialog = this.shadowRoot.getElementById("boost-modal");
-      if (dialog) dialog.open = true;
+      // Wire the closed listener exactly once.
+      dialog.addEventListener("closed", () => {
+        this._modalOpen = false;
+        this._resetModal();
+      });
     }
 
-    this._bindEvents();
+    // Keep heading in sync (entity name may change on config reload)
+    root.getElementById("boost-modal").heading = this._name;
+
+    // Redraw only the card body on every hass update
+    const { label: statusLabel, active: statusActive, heating: statusHeating } = this._statusText;
+
+    root.getElementById("hbc-card").innerHTML = `
+      <div class="card-top">
+        ${this._config.show_graph ? this._buildGraphSvg() : ""}
+        <div class="body">
+
+          <div class="row-top">
+            ${this._config.icon
+              ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
+              : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                   <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                 </svg>`
+            }
+            <span class="name">${this._name}</span>
+            <div class="status-wrap">
+              ${statusHeating ? `<ha-icon class="status-flame" icon="mdi:fire"></ha-icon>` : ""}
+              <span class="status ${statusActive || statusHeating ? "status--on" : ""}">${statusLabel}</span>
+            </div>
+          </div>
+
+          <div class="row-main">
+            <div class="temp-block">
+              <span class="temp-val">${this._currentTemp}</span>
+              <span class="temp-lbl">Current</span>
+            </div>
+            <div class="actions">
+              ${this._boostActive ? `
+                <div class="pill-active">Boosting</div>
+                <button class="btn-stop" id="stop-btn">Stop boost</button>
+              ` : `
+                <button class="btn-boost" id="toggle-btn">Boost</button>
+              `}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    this._bindCardEvents();
   }
 
-  _bindEvents() {
-    const root = this.shadowRoot;
-    const dialog = root.getElementById("boost-modal");
+  _bindCardEvents() {
+    const card = this.shadowRoot.getElementById("hbc-card");
 
-    // ── Card buttons ──────────────────────────────────────────────────────
-
-    root.getElementById("toggle-btn")?.addEventListener("click", () => {
-      this._modalOpen = true;
-      // Defer by one task so the triggering click finishes propagating before
-      // mwc-dialog appends its scrim to document.body and starts listening for
-      // outside-clicks — otherwise that same click is seen as a scrim-dismiss
-      // and the dialog opens then immediately closes.
-      setTimeout(() => {
-        if (this._modalOpen) {
-          const d = this.shadowRoot?.getElementById("boost-modal");
-          if (d) d.open = true;
-        }
-      }, 0);
+    card.querySelector("#toggle-btn")?.addEventListener("click", () => {
+      if (this._modalOpen) return; // guard: ignore duplicate/rapid taps
+      this._openModal();
     });
 
-    root.getElementById("stop-btn")?.addEventListener("click", async () => {
+    card.querySelector("#stop-btn")?.addEventListener("click", async () => {
       try {
         await this._hass.callService(BOOST_DOMAIN, "cancel_boost", {
           entity_id: this._climateId,
@@ -345,48 +305,102 @@ class HiveBoostCard extends HTMLElement {
         console.error("[HiveBoostCard] cancel_boost:", e);
       }
     });
+  }
 
-    // ── Modal lifecycle ───────────────────────────────────────────────────
+  // ── Modal ─────────────────────────────────────────────────────────────────
 
-    // ha-dialog fires 'closed' after its exit animation completes,
-    // whether dismissed via scrim, Escape, or dialogAction="cancel".
-    dialog?.addEventListener("closed", () => {
-      this._modalOpen = false;
-      this._resetModal();
-    });
+  _openModal() {
+    const dialog = this.shadowRoot.getElementById("boost-modal");
+    if (!dialog) return;
 
-    // ── Picker — surgical DOM updates so the dialog stays open ────────────
+    const totalMins = this._modalHours * 60 + this._modalMins;
+    const tooShort = totalMins < 15;
 
-    root.querySelectorAll(".temp-adj").forEach(btn => {
+    // Populate picker content fresh each open
+    dialog.innerHTML = `
+      <div class="modal-content">
+        <div class="exp-row">
+          <span class="exp-label">Temperature</span>
+          <div class="temp-picker">
+            <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
+            <span class="temp-display">${this._modalTemp}°</span>
+            <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
+          </div>
+        </div>
+
+        <span class="exp-label">Duration</span>
+        <div class="dur-picker">
+          <div class="dur-col">
+            ${HOUR_OPTIONS.map(h => `
+              <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
+                    data-dtype="hours" data-dval="${h}">${h}h</span>
+            `).join("")}
+          </div>
+          <div class="dur-sep">:</div>
+          <div class="dur-col">
+            ${MINUTE_OPTIONS.map(m => `
+              <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
+                    data-dtype="mins" data-dval="${m}">${m}m</span>
+            `).join("")}
+          </div>
+        </div>
+
+        ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
+
+        <div class="modal-actions">
+          <mwc-button id="start-btn" raised ?disabled="${tooShort}">Start Boost</mwc-button>
+          <mwc-button id="cancel-btn" dialogAction="cancel">Cancel</mwc-button>
+        </div>
+      </div>
+    `;
+
+    this._bindModalEvents();
+    this._modalOpen = true;
+
+    // Defer open so the triggering click event finishes propagating before
+    // mwc-dialog attaches its document-level outside-click listener —
+    // otherwise that same click is treated as a scrim dismiss.
+    setTimeout(() => {
+      if (this._modalOpen) {
+        const d = this.shadowRoot.getElementById("boost-modal");
+        if (d) d.open = true;
+      }
+    }, 0);
+  }
+
+  _bindModalEvents() {
+    const dialog = this.shadowRoot.getElementById("boost-modal");
+
+    dialog.querySelectorAll(".temp-adj").forEach(btn => {
       btn.addEventListener("click", () => {
         this._modalTemp = Math.max(5, Math.min(32, this._modalTemp + +btn.dataset.adj));
-        root.querySelector(".temp-display").textContent = `${this._modalTemp}°`;
-        root.querySelector('[data-adj="-1"]').disabled = this._modalTemp <= 5;
-        root.querySelector('[data-adj="1"]').disabled = this._modalTemp >= 32;
+        dialog.querySelector(".temp-display").textContent = `${this._modalTemp}°`;
+        dialog.querySelector('[data-adj="-1"]').disabled = this._modalTemp <= 5;
+        dialog.querySelector('[data-adj="1"]').disabled = this._modalTemp >= 32;
       });
     });
 
-    root.querySelectorAll(".dur-item").forEach(item => {
+    dialog.querySelectorAll(".dur-item").forEach(item => {
       item.addEventListener("click", () => {
         const val = +item.dataset.dval;
         if (item.dataset.dtype === "hours") {
           this._modalHours = val;
-          root.querySelectorAll('[data-dtype="hours"]').forEach(i =>
+          dialog.querySelectorAll('[data-dtype="hours"]').forEach(i =>
             i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalHours)
           );
         } else {
           this._modalMins = val;
-          root.querySelectorAll('[data-dtype="mins"]').forEach(i =>
+          dialog.querySelectorAll('[data-dtype="mins"]').forEach(i =>
             i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalMins)
           );
         }
         const tooShort = this._modalHours * 60 + this._modalMins < 15;
-        const startBtn = root.getElementById("start-btn");
+        const startBtn = dialog.querySelector("#start-btn");
         if (startBtn) startBtn.disabled = tooShort;
       });
     });
 
-    root.getElementById("start-btn")?.addEventListener("click", async () => {
+    dialog.querySelector("#start-btn")?.addEventListener("click", async () => {
       const mins = Math.max(15, this._modalHours * 60 + this._modalMins);
       try {
         await this._hass.callService(BOOST_DOMAIN, "start_boost", {
@@ -394,7 +408,8 @@ class HiveBoostCard extends HTMLElement {
           temperature: this._modalTemp,
           duration_minutes: mins,
         });
-        if (dialog) dialog.open = false;
+        const d = this.shadowRoot.getElementById("boost-modal");
+        if (d) d.open = false;
       } catch (e) {
         console.error("[HiveBoostCard] start_boost:", e);
       }
