@@ -8,6 +8,7 @@
  *   icon: mdi:thermometer     # optional icon (omit for default flame SVG)
  *   show_graph: true          # optional background temperature history graph
  *   button_label: Heat        # optional label for the boost button (default: "Boost")
+ *   stop_label: Stop          # optional label for the stop button (default: "Stop boost")
  */
 
 const BOOST_DOMAIN = "hive_boost";
@@ -236,7 +237,7 @@ class HiveBoostCard extends HTMLElement {
             <div class="actions">
               ${this._boostActive ? `
                 <div class="pill-active">Boosting</div>
-                <button class="btn-stop" id="stop-btn">Stop boost</button>
+                <button class="btn-stop" id="stop-btn">${this._config.stop_label ?? "Stop boost"}</button>
               ` : `
                 <button class="btn-boost" id="toggle-btn">${this._config.button_label ?? "Boost"}</button>
               `}
