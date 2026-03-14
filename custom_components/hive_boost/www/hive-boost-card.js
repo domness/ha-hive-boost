@@ -317,46 +317,49 @@ class HiveBoostCard extends HTMLElement {
     const dialog = this.shadowRoot.getElementById("boost-modal");
     if (!dialog) return;
 
-    const totalMins = this._modalHours * 60 + this._modalMins;
-    const tooShort = totalMins < 15;
+    const tooShort = this._modalHours * 60 + this._modalMins < 15;
 
     // Populate picker content fresh each open
     dialog.innerHTML = `
       <div class="modal-content">
-        <div class="exp-row">
-          <span class="exp-label">Temperature</span>
-          <div class="temp-picker">
-            <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
-            <span class="temp-display">${this._modalTemp}°</span>
-            <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
+
+        <div class="temp-card">
+          <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
+          <span class="temp-display">${this._modalTemp}°</span>
+          <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
+        </div>
+
+        <div class="dur-section">
+          <div class="dur-label">Duration</div>
+          <div class="dur-picker-wrap">
+            <div class="dur-highlight"></div>
+            <div class="dur-pickers">
+              <div class="dur-scroll" id="hours-scroll">
+                <div class="dur-spacer"></div>
+                ${HOUR_OPTIONS.map(h => `<div class="dur-scroll-item">${h}h</div>`).join("")}
+                <div class="dur-spacer"></div>
+              </div>
+              <div class="dur-scroll" id="mins-scroll">
+                <div class="dur-spacer"></div>
+                ${MINUTE_OPTIONS.map(m => `<div class="dur-scroll-item">${m}m</div>`).join("")}
+                <div class="dur-spacer"></div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <span class="exp-label">Duration</span>
-        <div class="dur-picker">
-          <div class="dur-col">
-            ${HOUR_OPTIONS.map(h => `
-              <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
-                    data-dtype="hours" data-dval="${h}">${h}h</span>
-            `).join("")}
-          </div>
-          <div class="dur-sep">:</div>
-          <div class="dur-col">
-            ${MINUTE_OPTIONS.map(m => `
-              <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
-                    data-dtype="mins" data-dval="${m}">${m}m</span>
-            `).join("")}
-          </div>
-        </div>
+        <button class="btn-start-full" id="start-btn" ${tooShort ? "disabled" : ""}>Start</button>
+        <button class="btn-cancel-full" id="cancel-btn">Cancel</button>
 
-        ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
-
-        <div class="modal-actions">
-          <mwc-button id="start-btn" raised ?disabled="${tooShort}">Start Boost</mwc-button>
-          <mwc-button id="cancel-btn" dialogAction="cancel">Cancel</mwc-button>
-        </div>
       </div>
     `;
+
+    // Set initial scroll positions immediately (elements exist in DOM even before dialog opens)
+    const ITEM_H = 52;
+    const hoursScroll = dialog.querySelector("#hours-scroll");
+    const minsScroll  = dialog.querySelector("#mins-scroll");
+    if (hoursScroll) hoursScroll.scrollTop = HOUR_OPTIONS.indexOf(this._modalHours) * ITEM_H;
+    if (minsScroll)  minsScroll.scrollTop  = MINUTE_OPTIONS.indexOf(this._modalMins) * ITEM_H;
 
     this._bindModalEvents();
     this._modalOpen = true;
@@ -372,7 +375,9 @@ class HiveBoostCard extends HTMLElement {
 
   _bindModalEvents() {
     const dialog = this.shadowRoot.getElementById("boost-modal");
+    const ITEM_H = 52;
 
+    // Temperature adjustment
     dialog.querySelectorAll(".temp-adj").forEach(btn => {
       btn.addEventListener("click", () => {
         this._modalTemp = Math.max(5, Math.min(32, this._modalTemp + +btn.dataset.adj));
@@ -382,26 +387,33 @@ class HiveBoostCard extends HTMLElement {
       });
     });
 
-    dialog.querySelectorAll(".dur-item").forEach(item => {
-      item.addEventListener("click", () => {
-        const val = +item.dataset.dval;
-        if (item.dataset.dtype === "hours") {
-          this._modalHours = val;
-          dialog.querySelectorAll('[data-dtype="hours"]').forEach(i =>
-            i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalHours)
-          );
-        } else {
-          this._modalMins = val;
-          dialog.querySelectorAll('[data-dtype="mins"]').forEach(i =>
-            i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalMins)
-          );
-        }
-        const tooShort = this._modalHours * 60 + this._modalMins < 15;
-        const startBtn = dialog.querySelector("#start-btn");
-        if (startBtn) startBtn.disabled = tooShort;
+    // Drum-roll scroll pickers
+    const setupScrollPicker = (scrollEl, options, setVal) => {
+      let scrollTimer;
+      scrollEl.addEventListener("scroll", () => {
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => {
+          const idx = Math.max(0, Math.min(options.length - 1, Math.round(scrollEl.scrollTop / ITEM_H)));
+          setVal(options[idx]);
+          scrollEl.scrollTo({ top: idx * ITEM_H, behavior: "smooth" });
+          const startBtn = dialog.querySelector("#start-btn");
+          if (startBtn) startBtn.disabled = this._modalHours * 60 + this._modalMins < 15;
+        }, 150);
       });
-    });
+    };
 
+    setupScrollPicker(
+      dialog.querySelector("#hours-scroll"),
+      HOUR_OPTIONS,
+      v => { this._modalHours = v; }
+    );
+    setupScrollPicker(
+      dialog.querySelector("#mins-scroll"),
+      MINUTE_OPTIONS,
+      v => { this._modalMins = v; }
+    );
+
+    // Start boost
     dialog.querySelector("#start-btn")?.addEventListener("click", async () => {
       const mins = Math.max(15, this._modalHours * 60 + this._modalMins);
       try {
@@ -415,6 +427,12 @@ class HiveBoostCard extends HTMLElement {
       } catch (e) {
         console.error("[HiveBoostCard] start_boost:", e);
       }
+    });
+
+    // Cancel
+    dialog.querySelector("#cancel-btn")?.addEventListener("click", () => {
+      const d = this.shadowRoot.getElementById("boost-modal");
+      if (d) d.open = false;
     });
   }
 
@@ -525,88 +543,157 @@ const CSS = `
   /* ha-dialog handles its own width, backdrop, and animation.
      We tune the dialog width via MDC custom properties. */
   ha-dialog {
-    --mdc-dialog-min-width: min(92vw, 340px);
-    --mdc-dialog-max-width: min(92vw, 340px);
+    --mdc-dialog-min-width: min(92vw, 380px);
+    --mdc-dialog-max-width: min(92vw, 380px);
   }
 
   .modal-content {
-    padding: 8px 0 4px;
+    padding: 4px 0 8px;
   }
 
-  /* Temperature picker row */
-  .exp-row {
+  /* Temperature card — full-width pill */
+  .temp-card {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 14px;
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 10%, var(--card-background-color, white));
+    border-radius: 16px;
+    padding: 20px 20px;
+    margin-bottom: 24px;
   }
-  .exp-label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--secondary-text-color, #aaa);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    margin-bottom: 10px;
-  }
-  .exp-row .exp-label { margin-bottom: 0; }
-
-  /* Temperature picker */
-  .temp-picker { display: flex; align-items: center; gap: 16px; }
   .temp-adj {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
+    width: 44px;
+    height: 44px;
     border: none;
-    background: var(--secondary-background-color, #F0F1F6);
-    font-size: 22px;
+    background: transparent;
+    font-size: 30px;
+    font-weight: 300;
     cursor: pointer;
-    color: var(--primary-color);
+    color: var(--primary-text-color, #333);
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 8px;
     transition: background 0.15s;
+    line-height: 1;
   }
   .temp-adj:disabled { color: var(--disabled-color, #ccc); cursor: default; }
-  .temp-adj:not(:disabled):active { background: color-mix(in srgb, var(--primary-color) 25%, var(--card-background-color, white)); }
+  .temp-adj:not(:disabled):active { background: color-mix(in srgb, var(--primary-color, #3D5AFE) 20%, transparent); }
   .temp-display {
-    font-size: 28px;
-    font-weight: 300;
-    color: var(--primary-color);
-    min-width: 64px;
+    font-size: 38px;
+    font-weight: 500;
+    color: var(--primary-color, #3D5AFE);
+    min-width: 80px;
     text-align: center;
   }
 
-  /* Duration picker */
-  .dur-picker {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  /* Duration section */
+  .dur-section { margin-bottom: 20px; }
+  .dur-label {
+    text-align: center;
+    font-size: 15px;
+    color: var(--secondary-text-color, #888);
     margin-bottom: 8px;
   }
-  .dur-col { display: flex; gap: 4px; }
-  .dur-sep { font-size: 18px; color: var(--secondary-text-color, #aaa); padding: 0 4px; }
-  .dur-item {
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 14px;
-    cursor: pointer;
+
+  /* Drum-roll picker */
+  .dur-picker-wrap {
+    position: relative;
+    height: 156px;
+    overflow: hidden;
+    border-radius: 12px;
+  }
+  /* Gradient fade for items above/below the selected row */
+  .dur-picker-wrap::before,
+  .dur-picker-wrap::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 60px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .dur-picker-wrap::before {
+    top: 0;
+    background: linear-gradient(to bottom, var(--card-background-color, white) 20%, transparent 100%);
+  }
+  .dur-picker-wrap::after {
+    bottom: 0;
+    background: linear-gradient(to top, var(--card-background-color, white) 20%, transparent 100%);
+  }
+  /* Highlight bar for the selected row */
+  .dur-highlight {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 52px;
+    transform: translateY(-50%);
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 10%, var(--card-background-color, white));
+    border-radius: 12px;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .dur-pickers {
+    display: flex;
+    height: 100%;
+    position: relative;
+    z-index: 0;
+  }
+  .dur-scroll {
+    flex: 1;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    height: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .dur-scroll::-webkit-scrollbar { display: none; }
+  .dur-spacer { height: 52px; flex-shrink: 0; }
+  .dur-scroll-item {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    scroll-snap-align: center;
+    font-size: 22px;
+    font-weight: 500;
     color: var(--secondary-text-color, #bbb);
-    transition: background 0.15s, color 0.15s;
     user-select: none;
   }
-  .dur-item:hover { color: var(--primary-text-color, #444); }
-  .dur-item--sel { background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white)); color: var(--primary-color); font-weight: 700; }
-  .dur-warn { font-size: 12px; color: var(--error-color, #F44336); margin: 0 0 8px; }
 
-  /* Action buttons rendered inside modal-content (hideActions is set on
-     ha-dialog so we own the layout rather than using MDC's action bar) */
-  .modal-actions {
-    display: flex;
-    flex-direction: row-reverse;
-    gap: 8px;
-    margin-top: 16px;
+  /* Action buttons */
+  .btn-start-full {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: var(--primary-color, #3D5AFE);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: opacity 0.15s;
   }
+  .btn-start-full:disabled { opacity: 0.4; cursor: default; }
+  .btn-start-full:not(:disabled):active { opacity: 0.85; }
+  .btn-cancel-full {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 8%, var(--card-background-color, white));
+    color: var(--primary-color, #3D5AFE);
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-cancel-full:active { opacity: 0.85; }
 `;
 
 if (!customElements.get("hive-boost-card")) {
