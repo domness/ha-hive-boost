@@ -354,13 +354,6 @@ class HiveBoostCard extends HTMLElement {
       </div>
     `;
 
-    // Set initial scroll positions immediately (elements exist in DOM even before dialog opens)
-    const ITEM_H = 52;
-    const hoursScroll = dialog.querySelector("#hours-scroll");
-    const minsScroll  = dialog.querySelector("#mins-scroll");
-    if (hoursScroll) hoursScroll.scrollTop = HOUR_OPTIONS.indexOf(this._modalHours) * ITEM_H;
-    if (minsScroll)  minsScroll.scrollTop  = MINUTE_OPTIONS.indexOf(this._modalMins) * ITEM_H;
-
     this._bindModalEvents();
     this._modalOpen = true;
 
@@ -370,6 +363,15 @@ class HiveBoostCard extends HTMLElement {
     setTimeout(() => {
       const d = this.shadowRoot.getElementById("boost-modal");
       if (d && !d.open) d.open = true;
+      // Set scroll positions after the dialog is open and the browser has
+      // performed layout — setting scrollTop on hidden elements is a no-op.
+      const ITEM_H = 52;
+      requestAnimationFrame(() => {
+        const hoursScroll = d?.querySelector("#hours-scroll");
+        const minsScroll  = d?.querySelector("#mins-scroll");
+        if (hoursScroll) hoursScroll.scrollTop = HOUR_OPTIONS.indexOf(this._modalHours) * ITEM_H;
+        if (minsScroll)  minsScroll.scrollTop  = MINUTE_OPTIONS.indexOf(this._modalMins) * ITEM_H;
+      });
     }, 0);
   }
 
