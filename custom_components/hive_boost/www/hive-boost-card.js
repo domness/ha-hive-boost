@@ -68,8 +68,18 @@ class HiveBoostCard extends HTMLElement {
         this._fetchHistory();         // async, intentionally not awaited
       }
     }
-    // If boost became active while the modal was open, close it
-    if (this._boostActive) this._modalOpen = false;
+    // If boost became active externally while the modal was open, close it
+    if (this._boostActive && this._modalOpen) {
+      this._modalOpen = false;
+      const dialog = this.shadowRoot.getElementById("boost-modal");
+      if (dialog) dialog.open = false;
+    }
+
+    // Skip re-rendering while the modal is open. Replacing innerHTML would
+    // destroy the ha-dialog element, which fires its 'closed' event and
+    // then immediately closes the freshly-recreated one.
+    if (this._modalOpen) return;
+
     try {
       this._render();
     } catch (e) {
@@ -102,7 +112,7 @@ class HiveBoostCard extends HTMLElement {
 
       if (temps.length >= 2) {
         this._graphData = temps;
-        this._render();
+        if (!this._modalOpen) this._render();
       }
     } catch (e) {
       console.debug("[HiveBoostCard] history fetch failed:", e);
