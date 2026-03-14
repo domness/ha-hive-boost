@@ -377,9 +377,9 @@ const CSS = `
   .icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--secondary-text-color, #aaa); --mdi-icon-size: 18px; }
   .name { flex: 1; font-size: 15px; font-weight: 600; }
   .status-wrap { display: flex; align-items: center; gap: 3px; }
-  .status-flame { --mdi-icon-size: 14px; color: #FF6600; }
+  .status-flame { --mdi-icon-size: 14px; color: var(--state-active-color, #FF6600); }
   .status { font-size: 13px; color: var(--secondary-text-color, #aaa); }
-  .status--on { color: #FF6600; font-weight: 600; }
+  .status--on { color: var(--state-active-color, #FF6600); font-weight: 600; }
 
   /* Main row */
   .row-main {
@@ -401,13 +401,13 @@ const CSS = `
   /* Boost button */
   .btn-boost {
     padding: 10px 22px;
-    background: #ECEEFF;
+    background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white));
     border: none;
     border-radius: 50px;
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
-    color: #3D5AFE;
+    color: var(--primary-color);
     transition: background 0.2s;
   }
   .btn-boost--open {
@@ -419,7 +419,7 @@ const CSS = `
   /* Active boosting pill */
   .pill-active {
     padding: 10px 22px;
-    background: #FF6600;
+    background: var(--state-active-color, #FF6600);
     border-radius: 50px;
     font-size: 14px;
     font-weight: 600;
@@ -434,7 +434,7 @@ const CSS = `
     padding: 2px 6px;
     transition: color 0.15s;
   }
-  .btn-stop:hover { color: #FF3B30; }
+  .btn-stop:hover { color: var(--error-color, #FF3B30); }
 
   /* Expander — sibling of .card-top, outside the graph clipping region */
   .expander {
@@ -468,18 +468,18 @@ const CSS = `
     background: var(--secondary-background-color, #F0F1F6);
     font-size: 22px;
     cursor: pointer;
-    color: #3D5AFE;
+    color: var(--primary-color);
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s;
   }
-  .temp-adj:disabled { color: #ccc; cursor: default; }
-  .temp-adj:not(:disabled):active { background: #DDDFF8; }
+  .temp-adj:disabled { color: var(--disabled-color, #ccc); cursor: default; }
+  .temp-adj:not(:disabled):active { background: color-mix(in srgb, var(--primary-color) 25%, var(--card-background-color, white)); }
   .temp-display {
     font-size: 28px;
     font-weight: 300;
-    color: #3D5AFE;
+    color: var(--primary-color);
     min-width: 64px;
     text-align: center;
   }
@@ -503,8 +503,8 @@ const CSS = `
     user-select: none;
   }
   .dur-item:hover { color: var(--primary-text-color, #444); }
-  .dur-item--sel { background: #ECEEFF; color: #3D5AFE; font-weight: 700; }
-  .dur-warn { font-size: 12px; color: #F44336; margin: 0 0 8px; }
+  .dur-item--sel { background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white)); color: var(--primary-color); font-weight: 700; }
+  .dur-warn { font-size: 12px; color: var(--error-color, #F44336); margin: 0 0 8px; }
 
   /* Start button */
   .btn-start {
@@ -512,8 +512,8 @@ const CSS = `
     width: 100%;
     padding: 14px;
     margin-top: 12px;
-    background: #3D5AFE;
-    color: white;
+    background: var(--primary-color);
+    color: var(--text-primary-color, white);
     border: none;
     border-radius: 50px;
     font-size: 15px;
@@ -521,7 +521,7 @@ const CSS = `
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
   }
-  .btn-start:disabled { background: #B0B7FF; cursor: default; }
+  .btn-start:disabled { background: color-mix(in srgb, var(--primary-color) 50%, var(--card-background-color, white)); cursor: default; }
   .btn-start:not(:disabled):active { transform: scale(0.98); }
 `;
 
