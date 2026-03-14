@@ -202,76 +202,78 @@ class HiveBoostCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${CSS}</style>
       <ha-card>
-        ${this._config.show_graph ? this._buildGraphSvg() : ""}
-        <div class="body">
+        <div class="card-top">
+          ${this._config.show_graph ? this._buildGraphSvg() : ""}
+          <div class="body">
 
-          <div class="row-top">
-            ${this._config.icon
-              ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
-              : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                   <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-                 </svg>`
-            }
-            <span class="name">${this._name}</span>
-            <div class="status-wrap">
-              ${statusHeating ? `<ha-icon class="status-flame" icon="mdi:fire"></ha-icon>` : ""}
-              <span class="status ${statusActive || statusHeating ? "status--on" : ""}">${statusLabel}</span>
-            </div>
-          </div>
-
-          <div class="row-main">
-            <div class="temp-block">
-              <span class="temp-val">${this._currentTemp}</span>
-              <span class="temp-lbl">Current</span>
-            </div>
-            <div class="actions">
-              ${this._boostActive ? `
-                <div class="pill-active">Boosting</div>
-                <button class="btn-stop" id="stop-btn">Stop boost</button>
-              ` : `
-                <button class="btn-boost ${this._expanded ? "btn-boost--open" : ""}" id="toggle-btn">
-                  ${this._expanded ? "✕ Close" : "Boost"}
-                </button>
-              `}
-            </div>
-          </div>
-
-          ${this._expanded && !this._boostActive ? `
-          <div class="expander">
-            <div class="exp-row">
-              <span class="exp-label">Temperature</span>
-              <div class="temp-picker">
-                <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
-                <span class="temp-display">${this._modalTemp}°</span>
-                <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
+            <div class="row-top">
+              ${this._config.icon
+                ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
+                : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                     <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                   </svg>`
+              }
+              <span class="name">${this._name}</span>
+              <div class="status-wrap">
+                ${statusHeating ? `<ha-icon class="status-flame" icon="mdi:fire"></ha-icon>` : ""}
+                <span class="status ${statusActive || statusHeating ? "status--on" : ""}">${statusLabel}</span>
               </div>
             </div>
 
-            <span class="exp-label">Duration</span>
-            <div class="dur-picker">
-              <div class="dur-col">
-                ${HOUR_OPTIONS.map(h => `
-                  <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
-                        data-dtype="hours" data-dval="${h}">${h}h</span>
-                `).join("")}
+            <div class="row-main">
+              <div class="temp-block">
+                <span class="temp-val">${this._currentTemp}</span>
+                <span class="temp-lbl">Current</span>
               </div>
-              <div class="dur-sep">:</div>
-              <div class="dur-col">
-                ${MINUTE_OPTIONS.map(m => `
-                  <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
-                        data-dtype="mins" data-dval="${m}">${m}m</span>
-                `).join("")}
+              <div class="actions">
+                ${this._boostActive ? `
+                  <div class="pill-active">Boosting</div>
+                  <button class="btn-stop" id="stop-btn">Stop boost</button>
+                ` : `
+                  <button class="btn-boost ${this._expanded ? "btn-boost--open" : ""}" id="toggle-btn">
+                    ${this._expanded ? "✕ Close" : "Boost"}
+                  </button>
+                `}
               </div>
             </div>
 
-            ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
-            <button class="btn-start" id="start-btn" ${tooShort ? "disabled" : ""}>
-              Start Boost
-            </button>
           </div>
-          ` : ""}
-
         </div>
+
+        ${this._expanded && !this._boostActive ? `
+        <div class="expander">
+          <div class="exp-row">
+            <span class="exp-label">Temperature</span>
+            <div class="temp-picker">
+              <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
+              <span class="temp-display">${this._modalTemp}°</span>
+              <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
+            </div>
+          </div>
+
+          <span class="exp-label">Duration</span>
+          <div class="dur-picker">
+            <div class="dur-col">
+              ${HOUR_OPTIONS.map(h => `
+                <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
+                      data-dtype="hours" data-dval="${h}">${h}h</span>
+              `).join("")}
+            </div>
+            <div class="dur-sep">:</div>
+            <div class="dur-col">
+              ${MINUTE_OPTIONS.map(m => `
+                <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
+                      data-dtype="mins" data-dval="${m}">${m}m</span>
+              `).join("")}
+            </div>
+          </div>
+
+          ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
+          <button class="btn-start" id="start-btn" ${tooShort ? "disabled" : ""}>
+            Start Boost
+          </button>
+        </div>
+        ` : ""}
       </ha-card>
     `;
 
@@ -338,9 +340,12 @@ class HiveBoostCard extends HTMLElement {
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const CSS = `
-  ha-card {
-    overflow: hidden;
+  ha-card { overflow: hidden; }
+
+  /* Top section — graph is clipped to this region */
+  .card-top {
     position: relative;
+    overflow: hidden;
   }
 
   /* Background graph */
@@ -431,10 +436,9 @@ const CSS = `
   }
   .btn-stop:hover { color: #FF3B30; }
 
-  /* Expander */
+  /* Expander — sibling of .card-top, outside the graph clipping region */
   .expander {
-    margin-top: 18px;
-    padding-top: 16px;
+    padding: 16px;
     border-top: 1px solid var(--divider-color, #eee);
   }
   .exp-row {
