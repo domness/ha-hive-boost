@@ -158,7 +158,10 @@ class HiveBoostCard extends HTMLElement {
 
   get _sensor()      { return this._hass?.states[this._sensorId]; }
   get _climate()     { return this._hass?.states[this._climateId]; }
-  get _boostActive() { return this._sensor?.attributes.boost_active === true; }
+  get _boostActive() {
+    return this._sensor?.attributes.boost_active === true
+        || this._climate?.state === "heat";
+  }
 
   get _currentTemp() {
     const t = this._sensor?.attributes.current_temperature
