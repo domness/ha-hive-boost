@@ -11,6 +11,12 @@ Adds per-room boost control for Hive TRVs in Home Assistant. Auto-discovers all 
 - Sensor entities per TRV exposing boost state, temperature, and time remaining
 - Events fired on boost start, end, and cancel — hook into your own automations
 
+## Example
+
+![Dashboard](./docs/images/dashboard.png)
+
+![Boost Picker](./docs/images/boost-picker.png)
+
 ## Requirements
 
 - Home Assistant 2026.3.1+
