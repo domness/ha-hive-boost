@@ -259,39 +259,60 @@ class HiveBoostCard extends HTMLElement {
     });
   }
 
-  // ── Bottom-sheet overlay (self-contained, no external dependencies) ────────
+  // ── Modal overlay (bottom-sheet on mobile, centered dialog on desktop) ────
 
   _openModal() {
     if (this._opening) return;
     this._opening = true;
 
+    // Inject shared overlay styles once
+    if (!document.getElementById("hive-boost-overlay-styles")) {
+      const s = document.createElement("style");
+      s.id = "hive-boost-overlay-styles";
+      s.textContent = `
+        .hive-overlay {
+          position: fixed; inset: 0; z-index: 9999;
+          display: flex; align-items: flex-end; justify-content: center;
+        }
+        .hive-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+        .hive-sheet {
+          position: relative; width: 100%;
+          background: var(--ha-card-background, var(--card-background-color, white));
+          border-radius: 24px 24px 0 0;
+          padding: 20px 20px max(env(safe-area-inset-bottom, 16px), 16px);
+          box-sizing: border-box;
+          transform: translateY(100%);
+          transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .hive-sheet.open { transform: translateY(0); }
+        .hive-sheet-title {
+          font-size: 17px; font-weight: 600; text-align: center;
+          margin-bottom: 16px; color: var(--primary-text-color);
+        }
+        @media (min-width: 600px) {
+          .hive-overlay { align-items: center; }
+          .hive-sheet {
+            max-width: 400px; border-radius: 24px;
+            transform: translateY(12px); opacity: 0;
+            transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.25s;
+          }
+          .hive-sheet.open { transform: translateY(0); opacity: 1; }
+        }
+      `;
+      document.head.appendChild(s);
+    }
+
     const overlay = document.createElement("div");
-    Object.assign(overlay.style, {
-      position: "fixed", inset: "0", zIndex: "9999",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-    });
+    overlay.className = "hive-overlay";
 
     const backdrop = document.createElement("div");
-    Object.assign(backdrop.style, {
-      position: "absolute", inset: "0", background: "rgba(0,0,0,0.45)",
-    });
+    backdrop.className = "hive-backdrop";
 
     const sheet = document.createElement("div");
-    Object.assign(sheet.style, {
-      position: "relative", width: "100%", maxWidth: "480px",
-      background: "var(--ha-card-background, var(--card-background-color, white))",
-      borderRadius: "24px 24px 0 0",
-      padding: "20px 20px max(env(safe-area-inset-bottom, 16px), 16px)",
-      boxSizing: "border-box",
-      transform: "translateY(100%)",
-      transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
-    });
+    sheet.className = "hive-sheet";
 
     const sheetTitle = document.createElement("div");
-    Object.assign(sheetTitle.style, {
-      fontSize: "17px", fontWeight: "600", textAlign: "center",
-      marginBottom: "16px", color: "var(--primary-text-color)",
-    });
+    sheetTitle.className = "hive-sheet-title";
     sheetTitle.textContent = this._name;
     sheet.appendChild(sheetTitle);
 
@@ -305,13 +326,12 @@ class HiveBoostCard extends HTMLElement {
     overlay.appendChild(sheet);
     document.body.appendChild(overlay);
 
-    // Slide in
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      sheet.style.transform = "translateY(0)";
+      sheet.classList.add("open");
     }));
 
     const close = () => {
-      sheet.style.transform = "translateY(100%)";
+      sheet.classList.remove("open");
       overlay.removeEventListener("hive-boost-close", close);
       setTimeout(() => {
         overlay.remove();
@@ -370,29 +390,27 @@ class HiveBoostPicker extends HTMLElement {
       <div class="picker-wrap">
 
         <div class="temp-card">
-          <button class="temp-adj" data-adj="-${TEMP_STEP}"
+          <button class="temp-adj" id="temp-dec"
                   ${this._temp <= TEMP_MIN ? "disabled" : ""}>−</button>
-          <span class="temp-display">${this._formatTemp(this._temp)}</span>
-          <button class="temp-adj" data-adj="${TEMP_STEP}"
+          <input type="number" class="temp-input" id="temp-input"
+                 value="${this._temp}" min="${TEMP_MIN}" max="${TEMP_MAX}" step="${TEMP_STEP}">
+          <button class="temp-adj" id="temp-inc"
                   ${this._temp >= TEMP_MAX ? "disabled" : ""}>+</button>
         </div>
 
         <div class="dur-section">
           <div class="dur-label">Duration</div>
-          <div class="dur-picker-wrap">
-            <div class="dur-highlight"></div>
-            <div class="dur-pickers">
-              <div class="dur-scroll" id="hours-scroll">
-                <div class="dur-spacer"></div>
-                ${HOUR_OPTIONS.map(h => `<div class="dur-scroll-item">${h}h</div>`).join("")}
-                <div class="dur-spacer"></div>
-              </div>
-              <div class="dur-scroll" id="mins-scroll">
-                <div class="dur-spacer"></div>
-                ${MINUTE_OPTIONS.map(m => `<div class="dur-scroll-item">${m}m</div>`).join("")}
-                <div class="dur-spacer"></div>
-              </div>
-            </div>
+          <div class="dur-selects">
+            <select id="hours-select" class="dur-select">
+              ${HOUR_OPTIONS.map(h =>
+                `<option value="${h}"${this._hours === h ? " selected" : ""}>${h}h</option>`
+              ).join("")}
+            </select>
+            <select id="mins-select" class="dur-select">
+              ${MINUTE_OPTIONS.map(m =>
+                `<option value="${m}"${this._mins === m ? " selected" : ""}>${m}m</option>`
+              ).join("")}
+            </select>
           </div>
         </div>
 
@@ -403,45 +421,43 @@ class HiveBoostPicker extends HTMLElement {
     `;
 
     this._bindEvents();
-    this._initScroll();
   }
 
   _bindEvents() {
     const root = this.shadowRoot;
-    const ITEM_H = 52;
 
-    // Temperature — 0.5° steps, float-safe rounding
-    root.querySelectorAll(".temp-adj").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const adj = parseFloat(btn.dataset.adj);
-        this._temp = Math.max(TEMP_MIN, Math.min(TEMP_MAX,
-          Math.round((this._temp + adj) * 10) / 10
-        ));
-        root.querySelector(".temp-display").textContent = this._formatTemp(this._temp);
-        root.querySelector(`[data-adj="-${TEMP_STEP}"]`).disabled = this._temp <= TEMP_MIN;
-        root.querySelector(`[data-adj="${TEMP_STEP}"]`).disabled  = this._temp >= TEMP_MAX;
-      });
-    });
+    // Temperature — keyboard input + ± buttons
+    const input = root.querySelector("#temp-input");
+    const dec   = root.querySelector("#temp-dec");
+    const inc   = root.querySelector("#temp-inc");
 
-    // Drum-roll scroll pickers
-    const setupScroll = (scrollEl, options, setVal) => {
-      let timer;
-      scrollEl.addEventListener("scroll", () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          const idx = Math.max(0, Math.min(options.length - 1,
-            Math.round(scrollEl.scrollTop / ITEM_H)));
-          setVal(options[idx]);
-          scrollEl.scrollTo({ top: idx * ITEM_H, behavior: "smooth" });
-          this._updateHighlights();
-          const startBtn = root.querySelector("#start-btn");
-          if (startBtn) startBtn.disabled = this._hours * 60 + this._mins < 15;
-        }, 150);
-      });
+    const setTemp = (val) => {
+      this._temp = Math.max(TEMP_MIN, Math.min(TEMP_MAX, Math.round(val * 10) / 10));
+      input.value = this._temp;
+      dec.disabled = this._temp <= TEMP_MIN;
+      inc.disabled = this._temp >= TEMP_MAX;
     };
 
-    setupScroll(root.querySelector("#hours-scroll"), HOUR_OPTIONS, v => { this._hours = v; });
-    setupScroll(root.querySelector("#mins-scroll"),  MINUTE_OPTIONS, v => { this._mins = v; });
+    dec.addEventListener("click", () => setTemp(this._temp - TEMP_STEP));
+    inc.addEventListener("click", () => setTemp(this._temp + TEMP_STEP));
+    input.addEventListener("change", () => {
+      const v = parseFloat(input.value);
+      if (!isNaN(v)) setTemp(v); else input.value = this._temp;
+    });
+
+    // Duration — standard selects
+    const updateStartBtn = () => {
+      const btn = root.querySelector("#start-btn");
+      if (btn) btn.disabled = this._hours * 60 + this._mins < 15;
+    };
+    root.querySelector("#hours-select").addEventListener("change", (e) => {
+      this._hours = parseInt(e.target.value);
+      updateStartBtn();
+    });
+    root.querySelector("#mins-select").addEventListener("change", (e) => {
+      this._mins = parseInt(e.target.value);
+      updateStartBtn();
+    });
 
     // Start boost
     root.querySelector("#start-btn")?.addEventListener("click", async () => {
@@ -464,32 +480,8 @@ class HiveBoostPicker extends HTMLElement {
     });
   }
 
-  _initScroll() {
-    const ITEM_H = 52;
-    // Delay until the sheet's open animation finishes so the elements are
-    // visible and scrollTop assignments take effect.
-    setTimeout(() => {
-      const root = this.shadowRoot;
-      const h = root.querySelector("#hours-scroll");
-      const m = root.querySelector("#mins-scroll");
-      if (h) h.scrollTop = HOUR_OPTIONS.indexOf(this._hours) * ITEM_H;
-      if (m) m.scrollTop = MINUTE_OPTIONS.indexOf(this._mins)  * ITEM_H;
-      this._updateHighlights();
-    }, 80);
-  }
-
   _closeOverlay() {
     this.dispatchEvent(new CustomEvent("hive-boost-close", { bubbles: true }));
-  }
-
-  _updateHighlights() {
-    const ITEM_H = 52;
-    this.shadowRoot.querySelectorAll(".dur-scroll").forEach(scrollEl => {
-      const idx = Math.round(scrollEl.scrollTop / ITEM_H);
-      scrollEl.querySelectorAll(".dur-scroll-item").forEach((item, i) => {
-        item.classList.toggle("selected", i === idx);
-      });
-    });
   }
 }
 
@@ -565,77 +557,49 @@ const PICKER_CSS = `
   .temp-card {
     display: flex; align-items: center; justify-content: space-between;
     background: color-mix(in srgb, var(--primary-color, #3D5AFE) 10%, var(--card-background-color, white));
-    border-radius: 16px; padding: 20px; margin-bottom: 24px;
+    border-radius: 16px; padding: 16px 20px; margin-bottom: 20px;
   }
   .temp-adj {
     width: 44px; height: 44px; border: none; background: transparent;
     font-size: 30px; font-weight: 300; cursor: pointer;
     color: var(--primary-text-color, #333);
     display: flex; align-items: center; justify-content: center;
-    border-radius: 8px; transition: background 0.15s; line-height: 1;
+    border-radius: 8px; transition: background 0.15s; line-height: 1; flex-shrink: 0;
   }
   .temp-adj:disabled { color: var(--disabled-color, #ccc); cursor: default; }
   .temp-adj:not(:disabled):active {
     background: color-mix(in srgb, var(--primary-color, #3D5AFE) 20%, transparent);
   }
-  .temp-display {
+  .temp-input {
+    flex: 1; text-align: center;
     font-size: 38px; font-weight: 500;
     color: var(--primary-color, #3D5AFE);
-    min-width: 90px; text-align: center;
+    background: transparent; border: none; outline: none;
+    min-width: 0; -moz-appearance: textfield;
   }
+  .temp-input::-webkit-inner-spin-button,
+  .temp-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .temp-input:focus { text-decoration: underline; text-decoration-color: var(--primary-color, #3D5AFE); }
 
   /* Duration */
   .dur-section { margin-bottom: 20px; }
   .dur-label {
-    text-align: center; font-size: 15px;
-    color: var(--secondary-text-color, #888); margin-bottom: 8px;
+    font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--secondary-text-color, #888); margin-bottom: 10px;
   }
-
-  .dur-picker-wrap {
-    position: relative; height: 156px;
-    overflow: hidden; border-radius: 12px;
+  .dur-selects { display: flex; gap: 10px; }
+  .dur-select {
+    flex: 1; padding: 12px 10px;
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 8%, var(--card-background-color, white));
+    border: 1.5px solid color-mix(in srgb, var(--primary-color, #3D5AFE) 20%, transparent);
+    border-radius: 12px; outline: none; cursor: pointer;
+    font-size: 18px; font-weight: 500; text-align: center;
+    color: var(--primary-text-color, #333);
+    appearance: none; -webkit-appearance: none;
   }
-  .dur-picker-wrap::before,
-  .dur-picker-wrap::after {
-    content: ""; position: absolute; left: 0; right: 0;
-    height: 60px; z-index: 2; pointer-events: none;
-  }
-  .dur-picker-wrap::before {
-    top: 0;
-    background: linear-gradient(to bottom,
-      var(--ha-card-background, var(--card-background-color, white)) 20%, transparent 100%);
-  }
-  .dur-picker-wrap::after {
-    bottom: 0;
-    background: linear-gradient(to top,
-      var(--ha-card-background, var(--card-background-color, white)) 20%, transparent 100%);
-  }
-
-  .dur-highlight {
-    position: absolute; top: 50%; left: 0; right: 0; height: 52px;
-    transform: translateY(-50%);
-    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 12%, var(--card-background-color, white));
-    border-radius: 12px; pointer-events: none; z-index: 1;
-  }
-  .dur-pickers { display: flex; height: 100%; position: relative; z-index: 0; }
-  .dur-scroll {
-    flex: 1; overflow-y: scroll;
-    scroll-snap-type: y mandatory; height: 100%;
-    scrollbar-width: none; -ms-overflow-style: none;
-  }
-  .dur-scroll::-webkit-scrollbar { display: none; }
-  .dur-spacer { height: 52px; flex-shrink: 0; }
-  .dur-scroll-item {
-    height: 52px; display: flex; align-items: center; justify-content: center;
-    scroll-snap-align: center;
-    font-size: 22px; font-weight: 400;
-    color: var(--secondary-text-color, #bbb);
-    user-select: none;
-    transition: color 0.15s, font-weight 0.15s, font-size 0.15s;
-  }
-  .dur-scroll-item.selected {
-    color: var(--primary-color, #3D5AFE);
-    font-weight: 700; font-size: 24px;
+  .dur-select:focus {
+    border-color: var(--primary-color, #3D5AFE);
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 14%, var(--card-background-color, white));
   }
 
   /* Buttons */
