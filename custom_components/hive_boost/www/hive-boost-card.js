@@ -14,6 +14,9 @@ const HOUR_OPTIONS = [0, 1, 2, 3];
 const MINUTE_OPTIONS = [0, 15, 30, 45];
 const HISTORY_REFRESH_MS = 5 * 60 * 1000; // re-fetch graph data every 5 min
 const HISTORY_HOURS = 24;
+const TEMP_STEP = 0.5;
+const TEMP_MIN = 5;
+const TEMP_MAX = 32;
 
 class HiveBoostCard extends HTMLElement {
   static getStubConfig() {
@@ -21,7 +24,6 @@ class HiveBoostCard extends HTMLElement {
   }
 
   // Default grid placement: half-width (6 of 12 columns), 3 rows tall.
-  // Users can override per-card via grid_options in their dashboard YAML.
   static getGridOptions() {
     return { columns: 6, rows: 3 };
   }
@@ -39,6 +41,8 @@ class HiveBoostCard extends HTMLElement {
     this._graphData = null;
     this._lastHistoryFetch = 0;
     this._initialized = false;
+    this._sheetBackdrop = null;
+    this._sheetEl = null;
     this.attachShadow({ mode: "open" });
   }
 
@@ -55,7 +59,6 @@ class HiveBoostCard extends HTMLElement {
     } else {
       throw new Error("hive-boost-card: entity must be climate.* or sensor.*_boost");
     }
-    // Reset graph when config changes
     this._graphData = null;
     this._lastHistoryFetch = 0;
   }
@@ -65,18 +68,17 @@ class HiveBoostCard extends HTMLElement {
     if (this._config?.show_graph) {
       const now = Date.now();
       if (now - this._lastHistoryFetch > HISTORY_REFRESH_MS) {
-        this._lastHistoryFetch = now; // set early to prevent concurrent fetches
-        this._fetchHistory();         // async, intentionally not awaited
+        this._lastHistoryFetch = now;
+        this._fetchHistory();
       }
     }
-    // If boost became active externally while the modal was open, close it
+
+    // If boost became active externally while the sheet was open, close it
     if (this._boostActive && this._modalOpen) {
-      this._modalOpen = false;
-      const dialog = this.shadowRoot.getElementById("boost-modal");
-      if (dialog) dialog.open = false;
+      this._closeSheet();
+      return;
     }
 
-    // Skip re-rendering while the modal is open.
     if (this._modalOpen) return;
 
     try {
@@ -133,7 +135,6 @@ class HiveBoostCard extends HTMLElement {
 
     const pts = data.map((t, i) => [toX(i), toY(t)]);
 
-    // Smooth cubic bezier through all points
     let linePath = `M ${pts[0][0]},${pts[0][1]}`;
     for (let i = 1; i < pts.length; i++) {
       const [x0, y0] = pts[i - 1];
@@ -143,7 +144,6 @@ class HiveBoostCard extends HTMLElement {
     }
     const fillPath = `${linePath} L ${W},${H} L 0,${H} Z`;
 
-    // Unique gradient ID per entity so multiple cards don't clash
     const gradId = `hbg-${this._climateId.replace(/\W/g, "_")}`;
 
     return `
@@ -207,6 +207,10 @@ class HiveBoostCard extends HTMLElement {
     return { label: mode === "off" || !mode ? "Off" : mode, active: false, heating: false };
   }
 
+  _formatTemp(t) {
+    return (t % 1 === 0) ? `${t}°` : `${t.toFixed(1)}°`;
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   _render() {
@@ -214,10 +218,6 @@ class HiveBoostCard extends HTMLElement {
 
     const root = this.shadowRoot;
 
-    // One-time setup: create the persistent DOM skeleton.
-    // ha-dialog lives here permanently — tearing it down on every hass update
-    // causes it to fire 'closed' asynchronously, which races with the next
-    // open call and produces the open→close flicker.
     if (!this._initialized) {
       this._initialized = true;
 
@@ -228,27 +228,8 @@ class HiveBoostCard extends HTMLElement {
       const card = document.createElement("ha-card");
       card.id = "hbc-card";
       root.appendChild(card);
-
-      const dialog = document.createElement("ha-dialog");
-      dialog.id = "boost-modal";
-      dialog.setAttribute("hideActions", "");
-      root.appendChild(dialog);
-
-      // Wire the closed listener exactly once.
-      dialog.addEventListener("closed", () => {
-        // mwc-dialog fires 'closed' but does NOT reset its own `open`
-        // property — that's left to the caller. Explicitly reset it so
-        // the next open attempt sees the correct state.
-        dialog.open = false;
-        this._modalOpen = false;
-        this._resetModal();
-      });
     }
 
-    // Keep heading in sync (entity name may change on config reload)
-    root.getElementById("boost-modal").heading = this._name;
-
-    // Redraw only the card body on every hass update
     const { label: statusLabel, active: statusActive, heating: statusHeating } = this._statusText;
 
     root.getElementById("hbc-card").innerHTML = `
@@ -296,7 +277,7 @@ class HiveBoostCard extends HTMLElement {
     const card = this.shadowRoot.getElementById("hbc-card");
 
     card.querySelector("#toggle-btn")?.addEventListener("click", () => {
-      if (this._modalOpen) return; // guard: ignore duplicate/rapid taps
+      if (this._modalOpen) return;
       this._openModal();
     });
 
@@ -311,81 +292,136 @@ class HiveBoostCard extends HTMLElement {
     });
   }
 
-  // ── Modal ─────────────────────────────────────────────────────────────────
+  // ── Bottom Sheet Modal ────────────────────────────────────────────────────
 
   _openModal() {
-    const dialog = this.shadowRoot.getElementById("boost-modal");
-    if (!dialog) return;
+    if (this._modalOpen) return;
+
+    // Inject global sheet styles once into the main document
+    if (!document.getElementById("hive-boost-sheet-styles")) {
+      const style = document.createElement("style");
+      style.id = "hive-boost-sheet-styles";
+      style.textContent = SHEET_CSS;
+      document.head.appendChild(style);
+    }
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "hive-boost-backdrop";
+
+    const sheet = document.createElement("div");
+    sheet.className = "hive-boost-sheet";
 
     const tooShort = this._modalHours * 60 + this._modalMins < 15;
+    const tempDisplay = this._formatTemp(this._modalTemp);
 
-    // Populate picker content fresh each open
-    dialog.innerHTML = `
-      <div class="modal-content">
+    sheet.innerHTML = `
+      <div class="hbs-handle"></div>
+      <div class="hbs-title">${this._name}</div>
 
-        <div class="temp-card">
-          <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
-          <span class="temp-display">${this._modalTemp}°</span>
-          <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
-        </div>
+      <div class="hbs-temp-card">
+        <button class="hbs-temp-adj" data-adj="-${TEMP_STEP}" ${this._modalTemp <= TEMP_MIN ? "disabled" : ""}>−</button>
+        <span class="hbs-temp-display">${tempDisplay}</span>
+        <button class="hbs-temp-adj" data-adj="${TEMP_STEP}" ${this._modalTemp >= TEMP_MAX ? "disabled" : ""}>+</button>
+      </div>
 
-        <div class="dur-section">
-          <div class="dur-label">Duration</div>
-          <div class="dur-picker-wrap">
-            <div class="dur-highlight"></div>
-            <div class="dur-pickers">
-              <div class="dur-scroll" id="hours-scroll">
-                <div class="dur-spacer"></div>
-                ${HOUR_OPTIONS.map(h => `<div class="dur-scroll-item">${h}h</div>`).join("")}
-                <div class="dur-spacer"></div>
-              </div>
-              <div class="dur-scroll" id="mins-scroll">
-                <div class="dur-spacer"></div>
-                ${MINUTE_OPTIONS.map(m => `<div class="dur-scroll-item">${m}m</div>`).join("")}
-                <div class="dur-spacer"></div>
-              </div>
+      <div class="hbs-dur-section">
+        <div class="hbs-dur-label">Duration</div>
+        <div class="hbs-dur-picker-wrap">
+          <div class="hbs-dur-highlight"></div>
+          <div class="hbs-dur-pickers">
+            <div class="hbs-dur-scroll" id="hours-scroll">
+              <div class="hbs-dur-spacer"></div>
+              ${HOUR_OPTIONS.map(h => `<div class="hbs-dur-scroll-item">${h}h</div>`).join("")}
+              <div class="hbs-dur-spacer"></div>
+            </div>
+            <div class="hbs-dur-scroll" id="mins-scroll">
+              <div class="hbs-dur-spacer"></div>
+              ${MINUTE_OPTIONS.map(m => `<div class="hbs-dur-scroll-item">${m}m</div>`).join("")}
+              <div class="hbs-dur-spacer"></div>
             </div>
           </div>
         </div>
-
-        <button class="btn-start-full" id="start-btn" ${tooShort ? "disabled" : ""}>Start</button>
-        <button class="btn-cancel-full" id="cancel-btn">Cancel</button>
-
       </div>
+
+      <button class="hbs-btn-start" id="start-btn" ${tooShort ? "disabled" : ""}>Start</button>
+      <button class="hbs-btn-cancel" id="cancel-btn">Cancel</button>
     `;
 
-    this._bindModalEvents();
+    this._sheetBackdrop = backdrop;
+    this._sheetEl = sheet;
     this._modalOpen = true;
 
-    // Defer open so the triggering click event finishes propagating before
-    // mwc-dialog attaches its document-level outside-click listener —
-    // otherwise that same click is treated as a scrim dismiss.
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+
+    this._bindModalEvents();
+
+    // Double rAF ensures the element is in the DOM and painted before the
+    // transition fires — otherwise the browser skips the opening animation.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      backdrop.classList.add("open");
+      sheet.classList.add("open");
+    }));
+
+    // Set initial scroll positions and highlights after layout
     setTimeout(() => {
-      const d = this.shadowRoot.getElementById("boost-modal");
-      if (d && !d.open) d.open = true;
-      // Set scroll positions after the dialog is open and the browser has
-      // performed layout — setting scrollTop on hidden elements is a no-op.
       const ITEM_H = 52;
-      requestAnimationFrame(() => {
-        const hoursScroll = d?.querySelector("#hours-scroll");
-        const minsScroll  = d?.querySelector("#mins-scroll");
-        if (hoursScroll) hoursScroll.scrollTop = HOUR_OPTIONS.indexOf(this._modalHours) * ITEM_H;
-        if (minsScroll)  minsScroll.scrollTop  = MINUTE_OPTIONS.indexOf(this._modalMins) * ITEM_H;
+      const hoursScroll = sheet.querySelector("#hours-scroll");
+      const minsScroll  = sheet.querySelector("#mins-scroll");
+      if (hoursScroll) hoursScroll.scrollTop = HOUR_OPTIONS.indexOf(this._modalHours) * ITEM_H;
+      if (minsScroll)  minsScroll.scrollTop  = MINUTE_OPTIONS.indexOf(this._modalMins) * ITEM_H;
+      this._updateScrollHighlights(sheet);
+    }, 50);
+
+    backdrop.addEventListener("click", () => this._closeSheet());
+  }
+
+  _closeSheet() {
+    const backdrop = this._sheetBackdrop;
+    const sheet = this._sheetEl;
+    if (!backdrop && !sheet) return;
+
+    if (backdrop) backdrop.classList.remove("open");
+    if (sheet) sheet.classList.remove("open");
+
+    this._sheetBackdrop = null;
+    this._sheetEl = null;
+
+    setTimeout(() => {
+      backdrop?.remove();
+      sheet?.remove();
+      this._modalOpen = false;
+      this._resetModal();
+      this._render();
+    }, 350);
+  }
+
+  _updateScrollHighlights(container) {
+    const ITEM_H = 52;
+    container.querySelectorAll(".hbs-dur-scroll").forEach(scrollEl => {
+      const idx = Math.round(scrollEl.scrollTop / ITEM_H);
+      scrollEl.querySelectorAll(".hbs-dur-scroll-item").forEach((item, i) => {
+        item.classList.toggle("selected", i === idx);
       });
-    }, 0);
+    });
   }
 
   _bindModalEvents() {
-    const dialog = this.shadowRoot.getElementById("boost-modal");
+    const sheet = this._sheetEl;
+    if (!sheet) return;
+
     const ITEM_H = 52;
 
-    // Temperature adjustment
-    dialog.querySelectorAll(".temp-adj").forEach(btn => {
+    // Temperature adjustment — 0.5° steps with float-safe rounding
+    sheet.querySelectorAll(".hbs-temp-adj").forEach(btn => {
       btn.addEventListener("click", () => {
-        this._modalTemp = Math.max(5, Math.min(32, this._modalTemp + +btn.dataset.adj));
-        dialog.querySelector(".temp-display").textContent = `${this._modalTemp}°`;
-        dialog.querySelector('[data-adj="-1"]').disabled = this._modalTemp <= 5;
-        dialog.querySelector('[data-adj="1"]').disabled = this._modalTemp >= 32;
+        const adj = parseFloat(btn.dataset.adj);
+        this._modalTemp = Math.max(TEMP_MIN, Math.min(TEMP_MAX,
+          Math.round((this._modalTemp + adj) * 10) / 10
+        ));
+        sheet.querySelector(".hbs-temp-display").textContent = this._formatTemp(this._modalTemp);
+        sheet.querySelector(`[data-adj="-${TEMP_STEP}"]`).disabled = this._modalTemp <= TEMP_MIN;
+        sheet.querySelector(`[data-adj="${TEMP_STEP}"]`).disabled  = this._modalTemp >= TEMP_MAX;
       });
     });
 
@@ -398,25 +434,26 @@ class HiveBoostCard extends HTMLElement {
           const idx = Math.max(0, Math.min(options.length - 1, Math.round(scrollEl.scrollTop / ITEM_H)));
           setVal(options[idx]);
           scrollEl.scrollTo({ top: idx * ITEM_H, behavior: "smooth" });
-          const startBtn = dialog.querySelector("#start-btn");
+          this._updateScrollHighlights(sheet);
+          const startBtn = sheet.querySelector("#start-btn");
           if (startBtn) startBtn.disabled = this._modalHours * 60 + this._modalMins < 15;
         }, 150);
       });
     };
 
     setupScrollPicker(
-      dialog.querySelector("#hours-scroll"),
+      sheet.querySelector("#hours-scroll"),
       HOUR_OPTIONS,
       v => { this._modalHours = v; }
     );
     setupScrollPicker(
-      dialog.querySelector("#mins-scroll"),
+      sheet.querySelector("#mins-scroll"),
       MINUTE_OPTIONS,
       v => { this._modalMins = v; }
     );
 
     // Start boost
-    dialog.querySelector("#start-btn")?.addEventListener("click", async () => {
+    sheet.querySelector("#start-btn")?.addEventListener("click", async () => {
       const mins = Math.max(15, this._modalHours * 60 + this._modalMins);
       try {
         await this._hass.callService(BOOST_DOMAIN, "start_boost", {
@@ -424,17 +461,15 @@ class HiveBoostCard extends HTMLElement {
           temperature: this._modalTemp,
           duration_minutes: mins,
         });
-        const d = this.shadowRoot.getElementById("boost-modal");
-        if (d) d.open = false;
+        this._closeSheet();
       } catch (e) {
         console.error("[HiveBoostCard] start_boost:", e);
       }
     });
 
     // Cancel
-    dialog.querySelector("#cancel-btn")?.addEventListener("click", () => {
-      const d = this.shadowRoot.getElementById("boost-modal");
-      if (d) d.open = false;
+    sheet.querySelector("#cancel-btn")?.addEventListener("click", () => {
+      this._closeSheet();
     });
   }
 
@@ -445,18 +480,16 @@ class HiveBoostCard extends HTMLElement {
   }
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────
+// ── Card styles (shadow DOM) ───────────────────────────────────────────────
 
 const CSS = `
   ha-card { overflow: hidden; }
 
-  /* Top section — graph is clipped to this region */
   .card-top {
     position: relative;
     overflow: hidden;
   }
 
-  /* Background graph */
   .graph-bg {
     position: absolute;
     bottom: 0;
@@ -475,7 +508,6 @@ const CSS = `
     z-index: 1;
   }
 
-  /* Top row */
   .row-top {
     display: flex;
     align-items: center;
@@ -489,7 +521,6 @@ const CSS = `
   .status { font-size: 13px; color: var(--secondary-text-color, #aaa); }
   .status--on { color: var(--state-active-color, #FF6600); font-weight: 600; }
 
-  /* Main row */
   .row-main {
     display: flex;
     align-items: flex-end;
@@ -506,7 +537,6 @@ const CSS = `
     gap: 6px;
   }
 
-  /* Boost button */
   .btn-boost {
     padding: 10px 22px;
     background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white));
@@ -520,7 +550,6 @@ const CSS = `
   }
   .btn-boost:active { opacity: 0.8; }
 
-  /* Active boosting pill */
   .pill-active {
     padding: 10px 22px;
     background: var(--state-active-color, #FF6600);
@@ -539,31 +568,74 @@ const CSS = `
     transition: color 0.15s;
   }
   .btn-stop:hover { color: var(--error-color, #FF3B30); }
+`;
 
-  /* ── ha-dialog content ────────────────────────────────────────────────── */
+// ── Bottom sheet styles (injected into document.head) ─────────────────────
+// These live outside shadow DOM so position:fixed works correctly relative
+// to the viewport, matching the HA entity-details slide-up pattern.
 
-  /* ha-dialog handles its own width, backdrop, and animation.
-     We tune the dialog width via MDC custom properties. */
-  ha-dialog {
-    --mdc-dialog-min-width: min(92vw, 380px);
-    --mdc-dialog-max-width: min(92vw, 380px);
+const SHEET_CSS = `
+  .hive-boost-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 9998;
+    transition: background 0.3s ease;
+  }
+  .hive-boost-backdrop.open {
+    background: rgba(0, 0, 0, 0.32);
   }
 
-  .modal-content {
-    padding: 4px 0 8px;
+  .hive-boost-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--ha-card-background, var(--card-background-color, #fff));
+    border-radius: 28px 28px 0 0;
+    z-index: 9999;
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.05, 0.7, 0.1, 1.0);
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 0 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.14);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--primary-text-color, #1A1A2E);
+  }
+  .hive-boost-sheet.open {
+    transform: translateY(0);
   }
 
-  /* Temperature card — full-width pill */
-  .temp-card {
+  /* Drag handle */
+  .hbs-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--divider-color, #e0e0e0);
+    border-radius: 2px;
+    margin: 12px auto 20px;
+  }
+
+  /* Sheet title */
+  .hbs-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--primary-text-color, #1A1A2E);
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  /* Temperature card */
+  .hbs-temp-card {
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: color-mix(in srgb, var(--primary-color, #3D5AFE) 10%, var(--card-background-color, white));
     border-radius: 16px;
-    padding: 20px 20px;
+    padding: 20px;
     margin-bottom: 24px;
   }
-  .temp-adj {
+  .hbs-temp-adj {
     width: 44px;
     height: 44px;
     border: none;
@@ -579,19 +651,21 @@ const CSS = `
     transition: background 0.15s;
     line-height: 1;
   }
-  .temp-adj:disabled { color: var(--disabled-color, #ccc); cursor: default; }
-  .temp-adj:not(:disabled):active { background: color-mix(in srgb, var(--primary-color, #3D5AFE) 20%, transparent); }
-  .temp-display {
+  .hbs-temp-adj:disabled { color: var(--disabled-color, #ccc); cursor: default; }
+  .hbs-temp-adj:not(:disabled):active {
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 20%, transparent);
+  }
+  .hbs-temp-display {
     font-size: 38px;
     font-weight: 500;
     color: var(--primary-color, #3D5AFE);
-    min-width: 80px;
+    min-width: 90px;
     text-align: center;
   }
 
   /* Duration section */
-  .dur-section { margin-bottom: 20px; }
-  .dur-label {
+  .hbs-dur-section { margin-bottom: 20px; }
+  .hbs-dur-label {
     text-align: center;
     font-size: 15px;
     color: var(--secondary-text-color, #888);
@@ -599,15 +673,14 @@ const CSS = `
   }
 
   /* Drum-roll picker */
-  .dur-picker-wrap {
+  .hbs-dur-picker-wrap {
     position: relative;
     height: 156px;
     overflow: hidden;
     border-radius: 12px;
   }
-  /* Gradient fade for items above/below the selected row */
-  .dur-picker-wrap::before,
-  .dur-picker-wrap::after {
+  .hbs-dur-picker-wrap::before,
+  .hbs-dur-picker-wrap::after {
     content: "";
     position: absolute;
     left: 0;
@@ -616,34 +689,40 @@ const CSS = `
     z-index: 2;
     pointer-events: none;
   }
-  .dur-picker-wrap::before {
+  .hbs-dur-picker-wrap::before {
     top: 0;
-    background: linear-gradient(to bottom, var(--card-background-color, white) 20%, transparent 100%);
+    background: linear-gradient(to bottom,
+      var(--ha-card-background, var(--card-background-color, white)) 20%,
+      transparent 100%);
   }
-  .dur-picker-wrap::after {
+  .hbs-dur-picker-wrap::after {
     bottom: 0;
-    background: linear-gradient(to top, var(--card-background-color, white) 20%, transparent 100%);
+    background: linear-gradient(to top,
+      var(--ha-card-background, var(--card-background-color, white)) 20%,
+      transparent 100%);
   }
-  /* Highlight bar for the selected row */
-  .dur-highlight {
+
+  /* Highlight bar — sits behind the centre row */
+  .hbs-dur-highlight {
     position: absolute;
     top: 50%;
     left: 0;
     right: 0;
     height: 52px;
     transform: translateY(-50%);
-    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 10%, var(--card-background-color, white));
+    background: color-mix(in srgb, var(--primary-color, #3D5AFE) 12%, var(--card-background-color, white));
     border-radius: 12px;
     pointer-events: none;
     z-index: 1;
   }
-  .dur-pickers {
+
+  .hbs-dur-pickers {
     display: flex;
     height: 100%;
     position: relative;
     z-index: 0;
   }
-  .dur-scroll {
+  .hbs-dur-scroll {
     flex: 1;
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
@@ -651,22 +730,29 @@ const CSS = `
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
-  .dur-scroll::-webkit-scrollbar { display: none; }
-  .dur-spacer { height: 52px; flex-shrink: 0; }
-  .dur-scroll-item {
+  .hbs-dur-scroll::-webkit-scrollbar { display: none; }
+  .hbs-dur-spacer { height: 52px; flex-shrink: 0; }
+  .hbs-dur-scroll-item {
     height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
     scroll-snap-align: center;
     font-size: 22px;
-    font-weight: 500;
+    font-weight: 400;
     color: var(--secondary-text-color, #bbb);
     user-select: none;
+    transition: color 0.15s, font-weight 0.15s, font-size 0.15s;
+  }
+  /* Selected item inside the highlight bar */
+  .hbs-dur-scroll-item.selected {
+    color: var(--primary-color, #3D5AFE);
+    font-weight: 700;
+    font-size: 24px;
   }
 
   /* Action buttons */
-  .btn-start-full {
+  .hbs-btn-start {
     display: block;
     width: 100%;
     padding: 16px;
@@ -679,10 +765,12 @@ const CSS = `
     cursor: pointer;
     margin-bottom: 10px;
     transition: opacity 0.15s;
+    box-sizing: border-box;
   }
-  .btn-start-full:disabled { opacity: 0.4; cursor: default; }
-  .btn-start-full:not(:disabled):active { opacity: 0.85; }
-  .btn-cancel-full {
+  .hbs-btn-start:disabled { opacity: 0.4; cursor: default; }
+  .hbs-btn-start:not(:disabled):active { opacity: 0.85; }
+
+  .hbs-btn-cancel {
     display: block;
     width: 100%;
     padding: 16px;
@@ -694,8 +782,9 @@ const CSS = `
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.15s;
+    box-sizing: border-box;
   }
-  .btn-cancel-full:active { opacity: 0.85; }
+  .hbs-btn-cancel:active { opacity: 0.85; }
 `;
 
 if (!customElements.get("hive-boost-card")) {
