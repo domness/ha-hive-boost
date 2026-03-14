@@ -2,7 +2,7 @@
   "domain": "hive_boost",
   "name": "Hive Boost",
   "codeowners": ["@domness"],
-  "version": "1.0.16",
+  "version": "1.0.17",
   "dependencies": ["panel_custom", "http"],
   "after_dependencies": ["hive"],
   "documentation": "https://github.com/domness/ha-hive-interface",

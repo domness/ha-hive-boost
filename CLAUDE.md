@@ -23,6 +23,16 @@ Call this HA service to reload just this integration:
 - `config_flow.py` — UI setup wizard
 - `const.py`    — all constants, tweak defaults here
 - `services.yaml` — service schema shown in Developer Tools
+- `panel.py`    — registers `www/hive-boost-card.js` as a versioned Lovelace resource
+- `www/hive-boost-card.js` — custom card (HiveBoostCard) and picker (HiveBoostPicker)
+
+## Frontend / JS changes
+After editing `hive-boost-card.js`, **bump the version in `manifest.json`** before reloading.
+`panel.py` appends `?v=<version>` to the resource URL on registration, which busts the browser
+and service-worker cache automatically. Without a version bump the browser will serve the old file.
+
+The card uses a self-contained bottom-sheet overlay (no Browser Mod required). On desktop
+(≥ 600 px) the picker renders as a centred dialog instead.
 
 ## Testing a boost manually
 Developer Tools → Services → hive_boost.start_boost

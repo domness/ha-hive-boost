@@ -52,6 +52,7 @@ entity: climate.main_bedroom   # required — climate.* or sensor.*_boost
 name: Main Bedroom             # optional — display name override (auto-detected if omitted)
 icon: mdi:bed                  # optional — any MDI icon; omit for default thermometer
 show_graph: true               # optional — show 24 h temperature history graph in background
+button_label: Heat             # optional — label for the boost button (default: "Boost")
 ```
 
 | Option | Required | Description |
@@ -60,6 +61,14 @@ show_graph: true               # optional — show 24 h temperature history grap
 | `name` | No | Override the display name shown on the card. Defaults to the entity's friendly name |
 | `icon` | No | Any [MDI icon](https://pictogrammers.com/library/mdi/) e.g. `mdi:bed`. Omit for the default thermometer |
 | `show_graph` | No | Set to `true` to show the last 24 hours of temperature history as a background sparkline |
+| `button_label` | No | Custom label for the boost button. Defaults to `Boost` |
+
+### Card behaviour
+
+- On **mobile** the boost picker opens as a bottom sheet sliding up from the bottom of the screen.
+- On **desktop** (≥ 600 px) it opens as a centred dialog.
+- The temperature field supports keyboard input as well as the ± buttons.
+- Duration is set with two dropdowns (hours and minutes) using the native OS picker on mobile.
 
 ## Services
 
