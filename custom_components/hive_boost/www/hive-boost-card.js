@@ -136,17 +136,17 @@ class HiveBoostCard extends HTMLElement {
            xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stop-color="var(--primary-color)" stop-opacity="0.18"/>
-            <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"/>
+            <stop offset="0%"   stop-color="var(--accent-color)" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="var(--accent-color)" stop-opacity="0"/>
           </linearGradient>
         </defs>
         <path d="${fillPath}"
               fill="url(#${gradId})"/>
         <path d="${linePath}"
               fill="none"
-              stroke="var(--primary-color)"
+              stroke="var(--accent-color)"
               stroke-width="2.5"
-              stroke-opacity="0.35"
+              stroke-opacity="0.8"
               stroke-linecap="round"
               stroke-linejoin="round"/>
       </svg>`;
