@@ -240,8 +240,7 @@ class HiveBoostCard extends HTMLElement {
             </div>
             <div class="actions">
               ${this._boostActive ? `
-                <div class="pill-active">Boosting</div>
-                <button class="btn-stop" id="stop-btn">${this._config.stop_label ?? "Stop boost"}</button>
+                <button class="btn-stop" id="stop-btn">${this._config.stop_label ?? "Stop"}</button>
               ` : `
                 <button class="btn-boost" id="toggle-btn">${this._config.button_label ?? "Boost"}</button>
               `}
@@ -543,17 +542,14 @@ const CARD_CSS = `
   }
   .btn-boost:active { opacity: 0.8; }
 
-  .pill-active {
-    padding: 10px 22px;
-    background: var(--state-active-color, #FF6600);
-    border-radius: 50px; font-size: 14px; font-weight: 600; color: white;
-  }
   .btn-stop {
-    background: none; border: none; cursor: pointer;
-    font-size: 12px; color: var(--secondary-text-color, #aaa);
-    padding: 2px 6px; transition: color 0.15s;
+    padding: 7px 16px;
+    background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white));
+    border: none; border-radius: 50px; cursor: pointer;
+    font-size: 14px; font-weight: 600; color: var(--primary-color);
+    transition: background 0.2s;
   }
-  .btn-stop:hover { color: var(--error-color, #FF3B30); }
+  .btn-stop:active { opacity: 0.8; }
 `;
 
 // ── Picker styles (shadow DOM — HiveBoostPicker) ──────────────────────────
