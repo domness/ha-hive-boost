@@ -110,20 +110,28 @@ class HiveBoostCard extends HTMLElement {
     const data = this._graphData;
     if (!data || data.length < 2) return "";
 
-    const W = 500, H = 120, PAD = 12;
+    const W = 500, H = 120;
+    const TOP = 60; // graph line confined to lower portion, leaving room for text
+    const BOT = 8;
     const min = Math.min(...data);
     const max = Math.max(...data);
     const range = max - min || 1;
     const toX = i => (i / (data.length - 1)) * W;
-    const toY = t => H - PAD - ((t - min) / range) * (H - PAD * 2);
+    const toY = t => H - BOT - ((t - min) / range) * (H - TOP - BOT);
     const pts = data.map((t, i) => [toX(i), toY(t)]);
 
+    // Catmull-Rom → cubic bezier for smooth curves through every point
     let linePath = `M ${pts[0][0]},${pts[0][1]}`;
-    for (let i = 1; i < pts.length; i++) {
-      const [x0, y0] = pts[i - 1];
-      const [x1, y1] = pts[i];
-      const cx = (x0 + x1) / 2;
-      linePath += ` C ${cx},${y0} ${cx},${y1} ${x1},${y1}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+      linePath += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2[0]},${p2[1]}`;
     }
     const fillPath = `${linePath} L ${W},${H} L 0,${H} Z`;
     const gradId = `hbg-${this._climateId.replace(/\W/g, "_")}`;
@@ -494,7 +502,7 @@ const CARD_CSS = `
 
   .graph-bg {
     position: absolute; bottom: 0; left: 0;
-    width: 100%; height: 55%;
+    width: 100%; height: 40%;
     pointer-events: none; z-index: 0;
   }
 
