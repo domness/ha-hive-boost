@@ -267,9 +267,13 @@ class HiveBoostCard extends HTMLElement {
     this._opening = true;
     setTimeout(() => { this._opening = false; }, 800);
 
-    // Browser Mod renders the picker card inside an adaptive bottom sheet.
-    // adaptive_force_bottom_sheet keeps it as a sheet on all screen sizes.
-    this._hass.callService("browser_mod", "popup", {
+    // Browser Mod popup must be triggered as a *browser call* (ll-custom DOM
+    // event), not a server call (hass.callService). Server calls route through
+    // HA which has no way to know which browser to target and the action is
+    // silently dropped. The ll-custom event is the same mechanism HA uses
+    // internally for fire-dom-event YAML actions — Browser Mod listens for it
+    // on the window and processes the browser_mod payload locally.
+    this._fireBrowserMod("browser_mod.popup", {
       title: this._name,
       content: {
         type: "custom:hive-boost-picker",
@@ -278,10 +282,18 @@ class HiveBoostCard extends HTMLElement {
       adaptive: true,
       adaptive_force_bottom_sheet: true,
       dismissable: true,
-    }).catch(e => {
-      console.error("[HiveBoostCard] browser_mod popup:", e);
-      this._opening = false;
     });
+  }
+
+  // Dispatch a browser-local Browser Mod action via the ll-custom DOM event.
+  // bubbles+composed lets it cross shadow-DOM boundaries to reach Browser
+  // Mod's window-level listener even when called from inside shadow roots.
+  _fireBrowserMod(service, data) {
+    this.dispatchEvent(new CustomEvent("ll-custom", {
+      bubbles: true,
+      composed: true,
+      detail: { browser_mod: { service, data } },
+    }));
   }
 }
 
@@ -412,7 +424,7 @@ class HiveBoostPicker extends HTMLElement {
           temperature: this._temp,
           duration_minutes: mins,
         });
-        this._hass.callService("browser_mod", "close_popup", {});
+        this._fireBrowserMod("browser_mod.close_popup", {});
       } catch (e) {
         console.error("[HiveBoostPicker] start_boost:", e);
       }
@@ -420,7 +432,7 @@ class HiveBoostPicker extends HTMLElement {
 
     // Cancel
     root.querySelector("#cancel-btn")?.addEventListener("click", () => {
-      this._hass.callService("browser_mod", "close_popup", {});
+      this._fireBrowserMod("browser_mod.close_popup", {});
     });
   }
 
@@ -436,6 +448,15 @@ class HiveBoostPicker extends HTMLElement {
       if (m) m.scrollTop = MINUTE_OPTIONS.indexOf(this._mins)  * ITEM_H;
       this._updateHighlights();
     }, 80);
+  }
+
+  // Same browser-call mechanism as HiveBoostCard._fireBrowserMod.
+  _fireBrowserMod(service, data) {
+    this.dispatchEvent(new CustomEvent("ll-custom", {
+      bubbles: true,
+      composed: true,
+      detail: { browser_mod: { service, data } },
+    }));
   }
 
   _updateHighlights() {
