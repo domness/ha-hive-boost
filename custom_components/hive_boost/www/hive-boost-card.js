@@ -518,9 +518,9 @@ const CARD_CSS = `
     position: relative; z-index: 1;
   }
 
-  .row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; container-type: inline-size; }
   .icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--secondary-text-color, #aaa); --mdi-icon-size: 18px; }
-  .name { flex: 1; font-size: 15px; font-weight: 600; }
+  .name { flex: 1; font-size: clamp(11px, 4.5cqi, 15px); font-weight: 600; white-space: nowrap; overflow: hidden; min-width: 0; }
   .status-wrap { display: flex; align-items: center; gap: 3px; }
   .status-flame { --mdi-icon-size: 14px; color: var(--state-active-color, #FF6600); }
   .status { font-size: 13px; color: var(--secondary-text-color, #aaa); }
@@ -544,9 +544,9 @@ const CARD_CSS = `
 
   .btn-stop {
     padding: 7px 16px;
-    background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white));
+    background: color-mix(in srgb, var(--error-color, #db4437) 15%, var(--card-background-color, white));
     border: none; border-radius: 50px; cursor: pointer;
-    font-size: 14px; font-weight: 600; color: var(--primary-color);
+    font-size: 14px; font-weight: 600; color: var(--error-color, #db4437);
     transition: background 0.2s;
   }
   .btn-stop:active { opacity: 0.8; }
