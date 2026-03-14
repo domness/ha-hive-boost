@@ -236,6 +236,10 @@ class HiveBoostCard extends HTMLElement {
 
       // Wire the closed listener exactly once.
       dialog.addEventListener("closed", () => {
+        // mwc-dialog fires 'closed' but does NOT reset its own `open`
+        // property — that's left to the caller. Explicitly reset it so
+        // the next open attempt sees the correct state.
+        dialog.open = false;
         this._modalOpen = false;
         this._resetModal();
       });
