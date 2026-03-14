@@ -20,13 +20,19 @@ class HiveBoostCard extends HTMLElement {
     return { entity: "climate.example" };
   }
 
+  // Default grid placement: half-width (6 of 12 columns), 3 rows tall.
+  // Users can override per-card via grid_options in their dashboard YAML.
+  static getGridOptions() {
+    return { columns: 6, rows: 3 };
+  }
+
   constructor() {
     super();
     this._hass = null;
     this._config = null;
     this._climateId = null;
     this._sensorId = null;
-    this._expanded = false;
+    this._modalOpen = false;
     this._modalTemp = 22;
     this._modalHours = 1;
     this._modalMins = 0;
@@ -62,6 +68,8 @@ class HiveBoostCard extends HTMLElement {
         this._fetchHistory();         // async, intentionally not awaited
       }
     }
+    // If boost became active while the modal was open, close it
+    if (this._boostActive) this._modalOpen = false;
     try {
       this._render();
     } catch (e) {
@@ -70,7 +78,7 @@ class HiveBoostCard extends HTMLElement {
   }
 
   getCardSize() {
-    return this._expanded ? 5 : 3;
+    return 3;
   }
 
   // ── History / graph ───────────────────────────────────────────────────────
@@ -230,9 +238,7 @@ class HiveBoostCard extends HTMLElement {
                   <div class="pill-active">Boosting</div>
                   <button class="btn-stop" id="stop-btn">Stop boost</button>
                 ` : `
-                  <button class="btn-boost ${this._expanded ? "btn-boost--open" : ""}" id="toggle-btn">
-                    ${this._expanded ? "✕ Close" : "Boost"}
-                  </button>
+                  <button class="btn-boost" id="toggle-btn">Boost</button>
                 `}
               </div>
             </div>
@@ -240,42 +246,52 @@ class HiveBoostCard extends HTMLElement {
           </div>
         </div>
 
-        ${this._expanded && !this._boostActive ? `
-        <div class="expander">
-          <div class="exp-row">
-            <span class="exp-label">Temperature</span>
-            <div class="temp-picker">
-              <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
-              <span class="temp-display">${this._modalTemp}°</span>
-              <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
-            </div>
+        <!-- Boost settings modal — shown via showModal(), overlays the full screen -->
+        <dialog id="boost-modal" aria-labelledby="modal-title">
+          <div class="modal-header">
+            <span class="modal-title" id="modal-title">Boost ${this._name}</span>
+            <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
           </div>
+          <div class="modal-body">
+            <div class="exp-row">
+              <span class="exp-label">Temperature</span>
+              <div class="temp-picker">
+                <button class="temp-adj" data-adj="-1" ${this._modalTemp <= 5 ? "disabled" : ""}>−</button>
+                <span class="temp-display">${this._modalTemp}°</span>
+                <button class="temp-adj" data-adj="1" ${this._modalTemp >= 32 ? "disabled" : ""}>+</button>
+              </div>
+            </div>
 
-          <span class="exp-label">Duration</span>
-          <div class="dur-picker">
-            <div class="dur-col">
-              ${HOUR_OPTIONS.map(h => `
-                <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
-                      data-dtype="hours" data-dval="${h}">${h}h</span>
-              `).join("")}
+            <span class="exp-label">Duration</span>
+            <div class="dur-picker">
+              <div class="dur-col">
+                ${HOUR_OPTIONS.map(h => `
+                  <span class="dur-item ${this._modalHours === h ? "dur-item--sel" : ""}"
+                        data-dtype="hours" data-dval="${h}">${h}h</span>
+                `).join("")}
+              </div>
+              <div class="dur-sep">:</div>
+              <div class="dur-col">
+                ${MINUTE_OPTIONS.map(m => `
+                  <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
+                        data-dtype="mins" data-dval="${m}">${m}m</span>
+                `).join("")}
+              </div>
             </div>
-            <div class="dur-sep">:</div>
-            <div class="dur-col">
-              ${MINUTE_OPTIONS.map(m => `
-                <span class="dur-item ${this._modalMins === m ? "dur-item--sel" : ""}"
-                      data-dtype="mins" data-dval="${m}">${m}m</span>
-              `).join("")}
-            </div>
+
+            <p class="dur-warn" style="${tooShort ? "" : "display:none"}">Minimum 15 minutes</p>
+            <button class="btn-start" id="start-btn" ${tooShort ? "disabled" : ""}>
+              Start Boost
+            </button>
           </div>
-
-          ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
-          <button class="btn-start" id="start-btn" ${tooShort ? "disabled" : ""}>
-            Start Boost
-          </button>
-        </div>
-        ` : ""}
+        </dialog>
       </ha-card>
     `;
+
+    // Open the modal if state says so (e.g. after hass update mid-modal)
+    if (this._modalOpen) {
+      this.shadowRoot.getElementById("boost-modal")?.showModal();
+    }
 
     this._bindEvents();
   }
@@ -283,10 +299,11 @@ class HiveBoostCard extends HTMLElement {
   _bindEvents() {
     const root = this.shadowRoot;
 
+    // ── Card buttons ──────────────────────────────────────────────────────
+
     root.getElementById("toggle-btn")?.addEventListener("click", () => {
-      this._expanded = !this._expanded;
-      if (!this._expanded) this._resetModal();
-      this._render();
+      this._modalOpen = true;
+      root.getElementById("boost-modal")?.showModal();
     });
 
     root.getElementById("stop-btn")?.addEventListener("click", async () => {
@@ -299,18 +316,56 @@ class HiveBoostCard extends HTMLElement {
       }
     });
 
+    // ── Modal close ───────────────────────────────────────────────────────
+
+    const dialog = root.getElementById("boost-modal");
+
+    root.getElementById("modal-close")?.addEventListener("click", () => {
+      this._closeModal(dialog);
+    });
+
+    // Tap on the backdrop (the dialog element itself, outside modal-body/header)
+    dialog?.addEventListener("click", (e) => {
+      if (e.target === dialog) this._closeModal(dialog);
+    });
+
+    // Native close event (Escape key)
+    dialog?.addEventListener("close", () => {
+      this._modalOpen = false;
+      this._resetModal();
+    });
+
+    // ── Picker — surgical DOM updates so the modal stays open ─────────────
+
     root.querySelectorAll(".temp-adj").forEach(btn => {
       btn.addEventListener("click", () => {
         this._modalTemp = Math.max(5, Math.min(32, this._modalTemp + +btn.dataset.adj));
-        this._render();
+        root.querySelector(".temp-display").textContent = `${this._modalTemp}°`;
+        root.querySelector('[data-adj="-1"]').disabled = this._modalTemp <= 5;
+        root.querySelector('[data-adj="1"]').disabled = this._modalTemp >= 32;
       });
     });
 
     root.querySelectorAll(".dur-item").forEach(item => {
       item.addEventListener("click", () => {
-        if (item.dataset.dtype === "hours") this._modalHours = +item.dataset.dval;
-        else this._modalMins = +item.dataset.dval;
-        this._render();
+        const val = +item.dataset.dval;
+        if (item.dataset.dtype === "hours") {
+          this._modalHours = val;
+          root.querySelectorAll('[data-dtype="hours"]').forEach(i =>
+            i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalHours)
+          );
+        } else {
+          this._modalMins = val;
+          root.querySelectorAll('[data-dtype="mins"]').forEach(i =>
+            i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalMins)
+          );
+        }
+        const totalMins = this._modalHours * 60 + this._modalMins;
+        const tooShort = totalMins < 15;
+        const startBtn = root.getElementById("start-btn");
+        const warn = root.querySelector(".dur-warn");
+        if (startBtn) startBtn.disabled = tooShort;
+        if (warn) warn.style.display = tooShort ? "" : "none";
       });
     });
 
@@ -322,12 +377,17 @@ class HiveBoostCard extends HTMLElement {
           temperature: this._modalTemp,
           duration_minutes: mins,
         });
-        this._expanded = false;
-        this._resetModal();
+        this._closeModal(dialog);
       } catch (e) {
         console.error("[HiveBoostCard] start_boost:", e);
       }
     });
+  }
+
+  _closeModal(dialog) {
+    this._modalOpen = false;
+    this._resetModal();
+    dialog?.close();
   }
 
   _resetModal() {
@@ -410,10 +470,6 @@ const CSS = `
     color: var(--primary-color);
     transition: background 0.2s;
   }
-  .btn-boost--open {
-    background: var(--secondary-background-color, #f0f0f0);
-    color: var(--secondary-text-color, #888);
-  }
   .btn-boost:active { opacity: 0.8; }
 
   /* Active boosting pill */
@@ -436,11 +492,64 @@ const CSS = `
   }
   .btn-stop:hover { color: var(--error-color, #FF3B30); }
 
-  /* Expander — sibling of .card-top, outside the graph clipping region */
-  .expander {
-    padding: 16px;
-    border-top: 1px solid var(--divider-color, #eee);
+  /* ── Modal dialog ─────────────────────────────────────────────────────── */
+
+  dialog {
+    border: none;
+    border-radius: 20px;
+    padding: 0;
+    width: min(92vw, 340px);
+    background: var(--card-background-color, white);
+    color: var(--primary-text-color, #1A1A2E);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.28);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    animation: modal-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
+
+  dialog::backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.93) translateY(10px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0);     }
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--divider-color, #eee);
+  }
+  .modal-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .modal-close {
+    background: var(--secondary-background-color, #f0f0f0);
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--secondary-text-color, #888);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .modal-close:hover { background: color-mix(in srgb, var(--error-color, #FF3B30) 15%, var(--card-background-color, white)); }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  /* Temperature picker row */
   .exp-row {
     display: flex;
     align-items: center;
