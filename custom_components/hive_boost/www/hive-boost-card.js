@@ -1,8 +1,6 @@
 /**
  * Hive Boost Card — individual per-room boost card for HA dashboards.
  *
- * Requires: Browser Mod (HACS) — used for the adaptive bottom-sheet popup.
- *
  * Configuration:
  *   type: custom:hive-boost-card
  *   entity: climate.lounge    # climate.* or sensor.*_boost
@@ -21,7 +19,7 @@ const TEMP_MIN = 5;
 const TEMP_MAX = 32;
 
 // ── HiveBoostCard ─────────────────────────────────────────────────────────
-// Main dashboard card. Opens a Browser Mod adaptive bottom-sheet popup
+// Main dashboard card. Opens a self-contained bottom-sheet overlay
 // containing HiveBoostPicker to configure and fire the boost.
 
 class HiveBoostCard extends HTMLElement {
@@ -65,6 +63,7 @@ class HiveBoostCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (this._overlayPicker) this._overlayPicker.hass = hass;
     if (this._config?.show_graph) {
       const now = Date.now();
       if (now - this._lastHistoryFetch > HISTORY_REFRESH_MS) {
@@ -260,46 +259,75 @@ class HiveBoostCard extends HTMLElement {
     });
   }
 
-  // ── Browser Mod popup ─────────────────────────────────────────────────────
+  // ── Bottom-sheet overlay (self-contained, no external dependencies) ────────
 
   _openModal() {
-    // Debounce rapid taps
+    if (this._opening) return;
     this._opening = true;
-    setTimeout(() => { this._opening = false; }, 800);
 
-    // Browser Mod popup must be triggered as a *browser call* (ll-custom DOM
-    // event), not a server call (hass.callService). Server calls route through
-    // HA which has no way to know which browser to target and the action is
-    // silently dropped. The ll-custom event is the same mechanism HA uses
-    // internally for fire-dom-event YAML actions — Browser Mod listens for it
-    // on the window and processes the browser_mod payload locally.
-    this._fireBrowserMod("browser_mod.popup", {
-      title: this._name,
-      content: {
-        type: "custom:hive-boost-picker",
-        entity: this._climateId,
-      },
-      adaptive: true,
-      adaptive_force_bottom_sheet: true,
-      dismissable: true,
+    const overlay = document.createElement("div");
+    Object.assign(overlay.style, {
+      position: "fixed", inset: "0", zIndex: "9999",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
     });
-  }
 
-  // Dispatch a browser-local Browser Mod action via the ll-custom DOM event.
-  // Dispatch on window directly so Browser Mod's listener receives it
-  // regardless of shadow DOM nesting depth.
-  _fireBrowserMod(service, data) {
-    window.dispatchEvent(new CustomEvent("ll-custom", {
-      bubbles: true,
-      composed: true,
-      detail: { browser_mod: { service, data } },
+    const backdrop = document.createElement("div");
+    Object.assign(backdrop.style, {
+      position: "absolute", inset: "0", background: "rgba(0,0,0,0.45)",
+    });
+
+    const sheet = document.createElement("div");
+    Object.assign(sheet.style, {
+      position: "relative", width: "100%", maxWidth: "480px",
+      background: "var(--ha-card-background, var(--card-background-color, white))",
+      borderRadius: "24px 24px 0 0",
+      padding: "20px 20px max(env(safe-area-inset-bottom, 16px), 16px)",
+      boxSizing: "border-box",
+      transform: "translateY(100%)",
+      transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
+    });
+
+    const sheetTitle = document.createElement("div");
+    Object.assign(sheetTitle.style, {
+      fontSize: "17px", fontWeight: "600", textAlign: "center",
+      marginBottom: "16px", color: "var(--primary-text-color)",
+    });
+    sheetTitle.textContent = this._name;
+    sheet.appendChild(sheetTitle);
+
+    const picker = document.createElement("hive-boost-picker");
+    picker.setConfig({ entity: this._climateId });
+    picker.hass = this._hass;
+    sheet.appendChild(picker);
+    this._overlayPicker = picker;
+
+    overlay.appendChild(backdrop);
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    // Slide in
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      sheet.style.transform = "translateY(0)";
     }));
+
+    const close = () => {
+      sheet.style.transform = "translateY(100%)";
+      overlay.removeEventListener("hive-boost-close", close);
+      setTimeout(() => {
+        overlay.remove();
+        this._overlayPicker = null;
+        this._opening = false;
+      }, 300);
+    };
+
+    backdrop.addEventListener("click", close);
+    overlay.addEventListener("hive-boost-close", close);
   }
 }
 
 // ── HiveBoostPicker ───────────────────────────────────────────────────────
-// Rendered by Browser Mod inside the popup. Manages its own picker state
-// and calls browser_mod.close_popup when the user confirms or cancels.
+// Rendered inside the bottom-sheet overlay. Manages its own picker state
+// and dispatches "hive-boost-close" when the user confirms or cancels.
 
 class HiveBoostPicker extends HTMLElement {
   static getStubConfig() { return { entity: "climate.example" }; }
@@ -424,7 +452,7 @@ class HiveBoostPicker extends HTMLElement {
           temperature: this._temp,
           duration_minutes: mins,
         });
-        this._fireBrowserMod("browser_mod.close_popup", {});
+        this._closeOverlay();
       } catch (e) {
         console.error("[HiveBoostPicker] start_boost:", e);
       }
@@ -432,14 +460,14 @@ class HiveBoostPicker extends HTMLElement {
 
     // Cancel
     root.querySelector("#cancel-btn")?.addEventListener("click", () => {
-      this._fireBrowserMod("browser_mod.close_popup", {});
+      this._closeOverlay();
     });
   }
 
   _initScroll() {
     const ITEM_H = 52;
-    // Delay until Browser Mod has finished its open animation so the
-    // elements are visible and scrollTop assignments take effect.
+    // Delay until the sheet's open animation finishes so the elements are
+    // visible and scrollTop assignments take effect.
     setTimeout(() => {
       const root = this.shadowRoot;
       const h = root.querySelector("#hours-scroll");
@@ -450,13 +478,8 @@ class HiveBoostPicker extends HTMLElement {
     }, 80);
   }
 
-  // Same browser-call mechanism as HiveBoostCard._fireBrowserMod.
-  _fireBrowserMod(service, data) {
-    window.dispatchEvent(new CustomEvent("ll-custom", {
-      bubbles: true,
-      composed: true,
-      detail: { browser_mod: { service, data } },
-    }));
+  _closeOverlay() {
+    this.dispatchEvent(new CustomEvent("hive-boost-close", { bubbles: true }));
   }
 
   _updateHighlights() {

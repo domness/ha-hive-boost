@@ -3,7 +3,7 @@
   "name": "Hive Boost",
   "codeowners": ["@domness"],
   "version": "1.0.14",
-  "dependencies": ["panel_custom", "http", "browser_mod"],
+  "dependencies": ["panel_custom", "http"],
   "after_dependencies": ["hive"],
   "documentation": "https://github.com/domness/ha-hive-interface",
   "issue_tracker": "https://github.com/domness/ha-hive-interface/issues",
