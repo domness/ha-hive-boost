@@ -214,12 +214,13 @@ class HiveBoostCard extends HTMLElement {
         ${this._config.show_graph ? this._buildGraphSvg() : ""}
         <div class="body">
           <div class="row-top">
-            ${this._config.icon
-              ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
-              : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                   <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-                 </svg>`
+            ${this._config.icon === false ? "" :
+              this._config.icon
+                ? `<ha-icon class="icon" icon="${this._config.icon}"></ha-icon>`
+                : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                     <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                   </svg>`
             }
             <span class="name">${this._name}</span>
             <div class="status-wrap">
@@ -531,7 +532,7 @@ const CARD_CSS = `
   .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
   .btn-boost {
-    padding: 10px 22px;
+    padding: 7px 16px;
     background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white));
     border: none; border-radius: 50px; cursor: pointer;
     font-size: 14px; font-weight: 600; color: var(--primary-color);
