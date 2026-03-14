@@ -7,6 +7,7 @@ only used as a fallback when HA is running in YAML-mode Lovelace.
 """
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -18,7 +19,16 @@ _LOGGER = logging.getLogger(__name__)
 
 _WWW_DIR = Path(__file__).parent / "www"
 _STATIC_URL = "/hive_boost_files"
-CARD_JS_URL = f"{_STATIC_URL}/hive-boost-card.js"
+_CARD_JS_BASE = f"{_STATIC_URL}/hive-boost-card.js"
+
+def _versioned_url() -> str:
+    try:
+        manifest = json.loads((Path(__file__).parent / "manifest.json").read_text())
+        return f"{_CARD_JS_BASE}?v={manifest['version']}"
+    except Exception:
+        return _CARD_JS_BASE
+
+CARD_JS_URL = _versioned_url()
 
 
 async def async_setup_panel(hass: HomeAssistant) -> None:
@@ -54,9 +64,9 @@ async def async_remove_panel(hass: HomeAssistant) -> None:
             return
         await collection.async_load()
         for item in collection.async_items():
-            if item.get("url") == CARD_JS_URL:
+            if item.get("url", "").split("?")[0] == _CARD_JS_BASE:
                 await collection.async_delete_item(item["id"])
-                _LOGGER.debug("Removed Lovelace resource: %s", CARD_JS_URL)
+                _LOGGER.debug("Removed Lovelace resource: %s", item["url"])
                 return
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("Could not remove Lovelace resource: %s", err)
@@ -76,10 +86,17 @@ async def _async_register_resource(hass: HomeAssistant, url: str) -> None:
 
         await collection.async_load()
 
+        base = url.split("?")[0]
         for item in collection.async_items():
-            if item.get("url") == url:
+            item_url = item.get("url", "")
+            if item_url == url:
                 _LOGGER.debug("Lovelace resource already registered: %s", url)
                 return
+            if item_url.split("?")[0] == base:
+                # Stale version — replace it
+                await collection.async_delete_item(item["id"])
+                _LOGGER.debug("Removed stale Lovelace resource: %s", item_url)
+                break
 
         await collection.async_create_item({"url": url, "res_type": "module"})
         _LOGGER.info("Registered Lovelace resource: %s", url)
