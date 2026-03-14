@@ -286,10 +286,10 @@ class HiveBoostCard extends HTMLElement {
   }
 
   // Dispatch a browser-local Browser Mod action via the ll-custom DOM event.
-  // bubbles+composed lets it cross shadow-DOM boundaries to reach Browser
-  // Mod's window-level listener even when called from inside shadow roots.
+  // Dispatch on window directly so Browser Mod's listener receives it
+  // regardless of shadow DOM nesting depth.
   _fireBrowserMod(service, data) {
-    this.dispatchEvent(new CustomEvent("ll-custom", {
+    window.dispatchEvent(new CustomEvent("ll-custom", {
       bubbles: true,
       composed: true,
       detail: { browser_mod: { service, data } },
@@ -452,7 +452,7 @@ class HiveBoostPicker extends HTMLElement {
 
   // Same browser-call mechanism as HiveBoostCard._fireBrowserMod.
   _fireBrowserMod(service, data) {
-    this.dispatchEvent(new CustomEvent("ll-custom", {
+    window.dispatchEvent(new CustomEvent("ll-custom", {
       bubbles: true,
       composed: true,
       detail: { browser_mod: { service, data } },
