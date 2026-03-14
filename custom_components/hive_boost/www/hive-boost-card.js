@@ -20,13 +20,19 @@ class HiveBoostCard extends HTMLElement {
     return { entity: "climate.example" };
   }
 
+  // Default grid placement: half-width (6 of 12 columns), 3 rows tall.
+  // Users can override per-card via grid_options in their dashboard YAML.
+  static getGridOptions() {
+    return { columns: 6, rows: 3 };
+  }
+
   constructor() {
     super();
     this._hass = null;
     this._config = null;
     this._climateId = null;
     this._sensorId = null;
-    this._expanded = false;
+    this._modalOpen = false;
     this._modalTemp = 22;
     this._modalHours = 1;
     this._modalMins = 0;
@@ -62,6 +68,8 @@ class HiveBoostCard extends HTMLElement {
         this._fetchHistory();         // async, intentionally not awaited
       }
     }
+    // If boost became active while the modal was open, close it
+    if (this._boostActive) this._modalOpen = false;
     try {
       this._render();
     } catch (e) {
@@ -70,7 +78,7 @@ class HiveBoostCard extends HTMLElement {
   }
 
   getCardSize() {
-    return this._expanded ? 5 : 3;
+    return 3;
   }
 
   // ── History / graph ───────────────────────────────────────────────────────
@@ -230,18 +238,27 @@ class HiveBoostCard extends HTMLElement {
                   <div class="pill-active">Boosting</div>
                   <button class="btn-stop" id="stop-btn">Stop boost</button>
                 ` : `
-                  <button class="btn-boost ${this._expanded ? "btn-boost--open" : ""}" id="toggle-btn">
-                    ${this._expanded ? "✕ Close" : "Boost"}
-                  </button>
+                  <button class="btn-boost" id="toggle-btn">Boost</button>
                 `}
               </div>
             </div>
 
           </div>
         </div>
+      </ha-card>
 
-        ${this._expanded && !this._boostActive ? `
-        <div class="expander">
+      <!--
+        ha-dialog renders via HA's Material dialog component.
+        It lives outside ha-card so it can overlay the full screen.
+        open is set imperatively after render to trigger HA's own
+        open animation and focus-trap logic.
+      -->
+      <ha-dialog
+        id="boost-modal"
+        heading="Boost ${this._name}"
+        hideActions
+      >
+        <div class="modal-content">
           <div class="exp-row">
             <span class="exp-label">Temperature</span>
             <div class="temp-picker">
@@ -269,24 +286,35 @@ class HiveBoostCard extends HTMLElement {
           </div>
 
           ${tooShort ? '<p class="dur-warn">Minimum 15 minutes</p>' : ""}
-          <button class="btn-start" id="start-btn" ${tooShort ? "disabled" : ""}>
-            Start Boost
-          </button>
+
+          <div class="modal-actions">
+            <mwc-button id="start-btn" raised ?disabled="${tooShort}">Start Boost</mwc-button>
+            <mwc-button id="cancel-btn" dialogAction="cancel">Cancel</mwc-button>
+          </div>
         </div>
-        ` : ""}
-      </ha-card>
+      </ha-dialog>
     `;
+
+    // Open the dialog imperatively so ha-dialog can run its own
+    // open animation and focus-trap setup (setting the attribute in
+    // HTML bypasses these lifecycle hooks).
+    if (this._modalOpen) {
+      const dialog = this.shadowRoot.getElementById("boost-modal");
+      if (dialog) dialog.open = true;
+    }
 
     this._bindEvents();
   }
 
   _bindEvents() {
     const root = this.shadowRoot;
+    const dialog = root.getElementById("boost-modal");
+
+    // ── Card buttons ──────────────────────────────────────────────────────
 
     root.getElementById("toggle-btn")?.addEventListener("click", () => {
-      this._expanded = !this._expanded;
-      if (!this._expanded) this._resetModal();
-      this._render();
+      this._modalOpen = true;
+      if (dialog) dialog.open = true;
     });
 
     root.getElementById("stop-btn")?.addEventListener("click", async () => {
@@ -299,18 +327,43 @@ class HiveBoostCard extends HTMLElement {
       }
     });
 
+    // ── Modal lifecycle ───────────────────────────────────────────────────
+
+    // ha-dialog fires 'closed' after its exit animation completes,
+    // whether dismissed via scrim, Escape, or dialogAction="cancel".
+    dialog?.addEventListener("closed", () => {
+      this._modalOpen = false;
+      this._resetModal();
+    });
+
+    // ── Picker — surgical DOM updates so the dialog stays open ────────────
+
     root.querySelectorAll(".temp-adj").forEach(btn => {
       btn.addEventListener("click", () => {
         this._modalTemp = Math.max(5, Math.min(32, this._modalTemp + +btn.dataset.adj));
-        this._render();
+        root.querySelector(".temp-display").textContent = `${this._modalTemp}°`;
+        root.querySelector('[data-adj="-1"]').disabled = this._modalTemp <= 5;
+        root.querySelector('[data-adj="1"]').disabled = this._modalTemp >= 32;
       });
     });
 
     root.querySelectorAll(".dur-item").forEach(item => {
       item.addEventListener("click", () => {
-        if (item.dataset.dtype === "hours") this._modalHours = +item.dataset.dval;
-        else this._modalMins = +item.dataset.dval;
-        this._render();
+        const val = +item.dataset.dval;
+        if (item.dataset.dtype === "hours") {
+          this._modalHours = val;
+          root.querySelectorAll('[data-dtype="hours"]').forEach(i =>
+            i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalHours)
+          );
+        } else {
+          this._modalMins = val;
+          root.querySelectorAll('[data-dtype="mins"]').forEach(i =>
+            i.classList.toggle("dur-item--sel", +i.dataset.dval === this._modalMins)
+          );
+        }
+        const tooShort = this._modalHours * 60 + this._modalMins < 15;
+        const startBtn = root.getElementById("start-btn");
+        if (startBtn) startBtn.disabled = tooShort;
       });
     });
 
@@ -322,8 +375,7 @@ class HiveBoostCard extends HTMLElement {
           temperature: this._modalTemp,
           duration_minutes: mins,
         });
-        this._expanded = false;
-        this._resetModal();
+        if (dialog) dialog.open = false;
       } catch (e) {
         console.error("[HiveBoostCard] start_boost:", e);
       }
@@ -410,10 +462,6 @@ const CSS = `
     color: var(--primary-color);
     transition: background 0.2s;
   }
-  .btn-boost--open {
-    background: var(--secondary-background-color, #f0f0f0);
-    color: var(--secondary-text-color, #888);
-  }
   .btn-boost:active { opacity: 0.8; }
 
   /* Active boosting pill */
@@ -436,11 +484,20 @@ const CSS = `
   }
   .btn-stop:hover { color: var(--error-color, #FF3B30); }
 
-  /* Expander — sibling of .card-top, outside the graph clipping region */
-  .expander {
-    padding: 16px;
-    border-top: 1px solid var(--divider-color, #eee);
+  /* ── ha-dialog content ────────────────────────────────────────────────── */
+
+  /* ha-dialog handles its own width, backdrop, and animation.
+     We tune the dialog width via MDC custom properties. */
+  ha-dialog {
+    --mdc-dialog-min-width: min(92vw, 340px);
+    --mdc-dialog-max-width: min(92vw, 340px);
   }
+
+  .modal-content {
+    padding: 8px 0 4px;
+  }
+
+  /* Temperature picker row */
   .exp-row {
     display: flex;
     align-items: center;
@@ -506,23 +563,14 @@ const CSS = `
   .dur-item--sel { background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color, white)); color: var(--primary-color); font-weight: 700; }
   .dur-warn { font-size: 12px; color: var(--error-color, #F44336); margin: 0 0 8px; }
 
-  /* Start button */
-  .btn-start {
-    display: block;
-    width: 100%;
-    padding: 14px;
-    margin-top: 12px;
-    background: var(--primary-color);
-    color: var(--text-primary-color, white);
-    border: none;
-    border-radius: 50px;
-    font-size: 15px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
+  /* Action buttons rendered inside modal-content (hideActions is set on
+     ha-dialog so we own the layout rather than using MDC's action bar) */
+  .modal-actions {
+    display: flex;
+    flex-direction: row-reverse;
+    gap: 8px;
+    margin-top: 16px;
   }
-  .btn-start:disabled { background: color-mix(in srgb, var(--primary-color) 50%, var(--card-background-color, white)); cursor: default; }
-  .btn-start:not(:disabled):active { transform: scale(0.98); }
 `;
 
 if (!customElements.get("hive-boost-card")) {
