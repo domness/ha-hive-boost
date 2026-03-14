@@ -324,7 +324,16 @@ class HiveBoostCard extends HTMLElement {
 
     root.getElementById("toggle-btn")?.addEventListener("click", () => {
       this._modalOpen = true;
-      if (dialog) dialog.open = true;
+      // Defer by one task so the triggering click finishes propagating before
+      // mwc-dialog appends its scrim to document.body and starts listening for
+      // outside-clicks — otherwise that same click is seen as a scrim-dismiss
+      // and the dialog opens then immediately closes.
+      setTimeout(() => {
+        if (this._modalOpen) {
+          const d = this.shadowRoot?.getElementById("boost-modal");
+          if (d) d.open = true;
+        }
+      }, 0);
     });
 
     root.getElementById("stop-btn")?.addEventListener("click", async () => {
