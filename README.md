@@ -60,6 +60,8 @@ icon: mdi:bed                  # optional — any MDI icon; omit for default the
 show_graph: true               # optional — show 24 h temperature history graph in background
 button_label: Heat             # optional — label for the boost button (default: "Boost")
 stop_label: Stop               # optional — label for the stop button (default: "Stop boost")
+show_button: false             # optional — hide the boost/stop button (default: true)
+show_status: false             # optional — hide the status text (default: true)
 ```
 
 | Option | Required | Description |
@@ -70,6 +72,8 @@ stop_label: Stop               # optional — label for the stop button (default
 | `show_graph` | No | Set to `true` to show the last 24 hours of temperature history as a background sparkline |
 | `button_label` | No | Custom label for the boost button. Defaults to `Boost` |
 | `stop_label` | No | Custom label for the stop button shown during an active boost. Defaults to `Stop boost` |
+| `show_button` | No | Set to `false` to hide the boost/stop button. Useful for display-only cards. Defaults to `true` |
+| `show_status` | No | Set to `false` to hide the status text (e.g. "Off", "45m left"). Defaults to `true` |
 
 ### Card behaviour
 

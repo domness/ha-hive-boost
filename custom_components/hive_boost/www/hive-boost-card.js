@@ -9,6 +9,8 @@
  *   show_graph: true          # optional background temperature history graph
  *   button_label: Heat        # optional label for the boost button (default: "Boost")
  *   stop_label: Stop          # optional label for the stop button (default: "Stop boost")
+ *   show_button: false        # optional hide the boost/stop button (default: true)
+ *   show_status: false        # optional hide the status text (default: true)
  */
 
 const BOOST_DOMAIN = "hive_boost";
@@ -211,6 +213,8 @@ class HiveBoostCard extends HTMLElement {
     }
 
     const { label: statusLabel, active: statusActive, heating: statusHeating } = this._statusText;
+    const showButton = this._config.show_button !== false;
+    const showStatus = this._config.show_status !== false;
 
     root.getElementById("hbc-card").innerHTML = `
       <div class="card-top">
@@ -226,18 +230,21 @@ class HiveBoostCard extends HTMLElement {
                    </svg>`
             }
             <span class="name">${this._name}</span>
+            ${showStatus ? `
             <div class="status-wrap">
               ${statusHeating ? `<ha-icon class="status-flame" icon="mdi:fire"></ha-icon>` : ""}
               <span class="status ${statusActive || statusHeating ? "status--on" : ""}">
                 ${statusLabel}
               </span>
             </div>
+            ` : ""}
           </div>
           <div class="row-main">
             <div class="temp-block">
               <span class="temp-val">${this._currentTemp}</span>
               <span class="temp-lbl">Current</span>
             </div>
+            ${showButton ? `
             <div class="actions">
               ${this._boostActive ? `
                 <button class="btn-stop" id="stop-btn">${this._config.stop_label ?? "Stop"}</button>
@@ -245,6 +252,7 @@ class HiveBoostCard extends HTMLElement {
                 <button class="btn-boost" id="toggle-btn">${this._config.button_label ?? "Boost"}</button>
               `}
             </div>
+            ` : ""}
           </div>
         </div>
       </div>
