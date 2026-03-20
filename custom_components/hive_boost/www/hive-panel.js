@@ -553,11 +553,11 @@ const CSS = `
     padding: 16px 16px 14px; box-shadow: 0 1px 6px rgba(0,0,0,.06);
   }
   .card-top {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+    display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px;
   }
   .room-icon { font-size: 18px; flex-shrink: 0; }
-  .room-name { flex: 1; font-size: 15px; font-weight: 600; }
-  .room-status { font-size: 13px; color: var(--secondary-text-color, #AAA); }
+  .room-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+  .room-status { flex: 0 1 46%; min-width: 0; font-size: 13px; color: var(--secondary-text-color, #AAA); text-align: right; white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
   .room-status.status--on { color: var(--state-active-color, #FF6600); font-weight: 600; }
 
   .card-bottom {

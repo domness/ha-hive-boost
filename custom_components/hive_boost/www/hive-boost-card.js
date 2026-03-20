@@ -537,12 +537,12 @@ const CARD_CSS = `
     position: relative; z-index: 1;
   }
 
-  .row-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; container-type: inline-size; }
+  .row-top { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px; container-type: inline-size; }
   .icon { width: 18px; height: 18px; flex-shrink: 0; color: var(--secondary-text-color, #aaa); --mdi-icon-size: 18px; }
   .name { flex: 1; font-size: clamp(11px, 4.5cqi, 15px); font-weight: 600; white-space: nowrap; overflow: hidden; min-width: 0; }
-  .status-wrap { display: flex; align-items: center; gap: 3px; }
+  .status-wrap { display: flex; align-items: flex-start; justify-content: flex-end; gap: 3px; flex: 0 1 46%; min-width: 0; }
   .status-flame { --mdi-icon-size: 14px; color: var(--state-active-color, #FF6600); }
-  .status { font-size: 13px; color: var(--secondary-text-color, #aaa); }
+  .status { font-size: 13px; color: var(--secondary-text-color, #aaa); text-align: right; white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
   .status--on { color: var(--state-active-color, #FF6600); font-weight: 600; }
 
   .row-main { display: flex; align-items: flex-end; justify-content: space-between; }
