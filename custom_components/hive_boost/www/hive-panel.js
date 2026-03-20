@@ -8,6 +8,11 @@
 
 const BOOST_DOMAIN = "hive_boost";
 const SENSOR_SUFFIX = "_boost";
+import {
+  formatBoostActionLabel,
+  formatBoostStatusLabel,
+  formatHeatingStatusLabel,
+} from "./status-labels.mjs";
 
 // Duration picker options
 const HOUR_OPTIONS = [0, 1, 2, 3];
@@ -79,7 +84,9 @@ class HivePanel extends HTMLElement {
       currentTemp: state.attributes.current_temperature,
       boostTemp: state.attributes.boost_temperature,
       minutesRemaining: state.attributes.minutes_remaining,
+      targetTemp: climateState?.attributes?.temperature ?? state.attributes.target_temperature,
       hvacMode: climateState ? climateState.state : state.attributes.hvac_mode,
+      hvacAction: climateState?.attributes?.hvac_action,
     };
   }
 
@@ -283,11 +290,15 @@ class HivePanel extends HTMLElement {
         ? `${parseFloat(s.currentTemp).toFixed(1)}°`
         : "—";
     let status, statusClass;
+    const target = s.boostTemp ?? s.targetTemp;
     if (s.boostActive) {
-      status =
-        s.minutesRemaining != null && s.minutesRemaining > 0
-          ? `${s.minutesRemaining}m left`
-          : "Boosting";
+      status = formatBoostStatusLabel({
+        minutesRemaining: s.minutesRemaining,
+        targetTemperature: target,
+      });
+      statusClass = "status--on";
+    } else if (s.hvacAction === "heating") {
+      status = formatHeatingStatusLabel(s.targetTemp);
       statusClass = "status--on";
     } else {
       status = s.hvacMode === "off" || !s.hvacMode ? "Off" : s.hvacMode;
@@ -314,7 +325,7 @@ class HivePanel extends HTMLElement {
               <circle cx="12" cy="12" r="9"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
-            ${s.boostActive ? "Boosting" : "Boost"}
+            ${s.boostActive ? formatBoostActionLabel(target) : "Boost"}
           </button>
         </div>
       </div>`;

@@ -21,6 +21,10 @@ const HISTORY_HOURS = 24;
 const TEMP_STEP = 0.5;
 const TEMP_MIN = 5;
 const TEMP_MAX = 32;
+import {
+  formatBoostStatusLabel,
+  formatHeatingStatusLabel,
+} from "./status-labels.mjs";
 
 // ── HiveBoostCard ─────────────────────────────────────────────────────────
 // Main dashboard card. Opens a self-contained bottom-sheet overlay
@@ -183,14 +187,21 @@ class HiveBoostCard extends HTMLElement {
   }
 
   get _statusText() {
+    const target = this._sensor?.attributes.boost_temperature
+      ?? this._sensor?.attributes.target_temperature
+      ?? this._climate?.attributes.temperature;
+
     if (this._boostActive) {
       const m = this._sensor?.attributes.minutes_remaining;
-      return { label: m > 0 ? `${m}m left` : "Boosting", active: true, heating: false };
+      return {
+        label: formatBoostStatusLabel({ minutesRemaining: m, targetTemperature: target }),
+        active: true,
+        heating: false,
+      };
     }
     const action = this._climate?.attributes.hvac_action;
-    const target = this._climate?.attributes.temperature;
-    if (action === "heating" && target != null) {
-      return { label: `Heating to ${target}°`, active: false, heating: true };
+    if (action === "heating") {
+      return { label: formatHeatingStatusLabel(target), active: false, heating: true };
     }
     const mode = this._climate?.state;
     return { label: mode === "off" || !mode ? "Off" : mode, active: false, heating: false };
